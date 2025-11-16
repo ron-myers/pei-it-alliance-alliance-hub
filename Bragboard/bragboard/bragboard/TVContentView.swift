@@ -1,6 +1,7 @@
 #if os(tvOS)
 import SwiftUI
 import SwiftData
+import CloudKit
 
 struct TVContentView: View {
     @Environment(\.modelContext) private var modelContext
@@ -9,7 +10,8 @@ struct TVContentView: View {
     @State private var currentPhotoIndex = 0
     @State private var slideshowTimer: Timer?
     @State private var showBouncing = false
-    @State private var showTestMode = false  // Toggle to add test photos
+    @State private var isSyncing = false
+    @State private var syncLog: [String] = []
     
     // Bouncing logo state
     @State private var logoPosition = CGPoint(x: 200, y: 200)
@@ -37,10 +39,7 @@ struct TVContentView: View {
             ZStack {
                 Color.black.ignoresSafeArea()
                 
-                if showTestMode {
-                    // TEST MODE: Add photos directly on Apple TV for testing
-                    TestModeView(modelContext: modelContext, items: items, showTestMode: $showTestMode)
-                } else if items.isEmpty {
+                if items.isEmpty {
                     // Show welcome screen if no photos
                     VStack(spacing: 30) {
                         Image("PIA logo-02")
@@ -57,37 +56,25 @@ struct TVContentView: View {
                                 .font(.headline)
                                 .foregroundColor(.white.opacity(0.7))
                             
-                            VStack(spacing: 15) {
-                                HStack(spacing: 20) {
-                                    // Test button to add sample photos
-                                    Button("Add Test Photo (For Testing)") {
-                                        showTestMode = true
-                                    }
-                                    .buttonStyle(.borderedProminent)
-                                    
-                                    // Manual Sync button
-                                    NavigationLink(destination: ManualSyncView()) {
-                                        Label("Manual Sync", systemImage: "arrow.triangle.2.circlepath")
-                                    }
-                                    .buttonStyle(.borderedProminent)
-                                    .tint(.green)
+                            HStack(spacing: 30) {
+                                // Sync button - triggers sync directly
+                                Button {
+                                    performSync()
+                                } label: {
+                                    Label("Sync", systemImage: "arrow.triangle.2.circlepath")
+                                        .font(.title3)
                                 }
+                                .buttonStyle(.borderedProminent)
+                                .tint(.green)
                                 
-                                HStack(spacing: 20) {
-                                    // Diagnostics button
-                                    NavigationLink(destination: TVDiagnosticsView()) {
-                                        Label("Diagnostics", systemImage: "stethoscope")
-                                    }
-                                    .buttonStyle(.bordered)
-                                    
-                                    // Debug button
-                                    NavigationLink(destination: DebugView()) {
-                                        Label("Debug", systemImage: "ant.circle")
-                                    }
-                                    .buttonStyle(.bordered)
+                                // Debug button - opens consolidated debug view
+                                NavigationLink(destination: ConsolidatedDebugView()) {
+                                    Label("Debug", systemImage: "hammer.circle")
+                                        .font(.title3)
                                 }
+                                .buttonStyle(.bordered)
                             }
-                            .padding(.top, 20)
+                            .padding(.top, 30)
                         }
                     }
                 } else if !showBouncing {
@@ -98,36 +85,27 @@ struct TVContentView: View {
                             currentIndex: $currentPhotoIndex
                         )
                         
-                        // Test button overlay (top right)
+                        // Control buttons overlay (top right)
                         VStack {
                             HStack {
                                 Spacer()
                                 
-                                NavigationLink(destination: ManualSyncView()) {
+                                Button {
+                                    performSync()
+                                } label: {
                                     Label("Sync", systemImage: "arrow.triangle.2.circlepath")
                                 }
                                 .buttonStyle(.borderedProminent)
                                 .tint(.green)
-                                .padding(.trailing)
+                                .padding(.trailing, 20)
                                 
-                                NavigationLink(destination: DebugView()) {
-                                    Label("Debug", systemImage: "ant.circle")
+                                NavigationLink(destination: ConsolidatedDebugView()) {
+                                    Label("Debug", systemImage: "hammer.circle")
                                 }
                                 .buttonStyle(.bordered)
-                                .padding(.trailing)
-                                
-                                NavigationLink(destination: TVDiagnosticsView()) {
-                                    Label("Diagnostics", systemImage: "stethoscope")
-                                }
-                                .buttonStyle(.bordered)
-                                .padding(.trailing)
-                                
-                                Button("Test Mode") {
-                                    showTestMode = true
-                                }
-                                .buttonStyle(.bordered)
-                                .padding()
+                                .padding(.trailing, 20)
                             }
+                            .padding(.top, 20)
                             Spacer()
                         }
                     }
@@ -187,6 +165,125 @@ struct TVContentView: View {
                     scheduleBouncingMode()
                 }
             }
+        }
+    }
+    
+    private func performSync() {
+        guard !isSyncing else { return }
+        
+        isSyncing = true
+        syncLog = ["🔄 Starting sync from CloudKit..."]
+        
+        print("📺 Performing manual sync...")
+        
+        let container = CKContainer.default()
+        let database = container.privateCloudDatabase
+        let zoneID = CKRecordZone.ID(zoneName: "com.apple.coredata.cloudkit.zone", ownerName: CKCurrentUserDefaultName)
+        
+        // Create configuration for full fetch
+        let configuration = CKFetchRecordZoneChangesOperation.ZoneConfiguration()
+        configuration.previousServerChangeToken = nil
+        
+        let operation = CKFetchRecordZoneChangesOperation(
+            recordZoneIDs: [zoneID],
+            configurationsByRecordZoneID: [zoneID: configuration]
+        )
+        
+        var fetchedRecords: [CKRecord] = []
+        
+        operation.recordWasChangedBlock = { recordID, result in
+            switch result {
+            case .success(let record):
+                if record.recordType == "CD_Item" {
+                    fetchedRecords.append(record)
+                }
+            case .failure(let error):
+                print("⚠️ Error fetching record: \(error.localizedDescription)")
+            }
+        }
+        
+        operation.recordZoneFetchResultBlock = { zoneID, result in
+            switch result {
+            case .success:
+                DispatchQueue.main.async {
+                    if fetchedRecords.isEmpty {
+                        self.syncLog.append("ℹ️ No new records found")
+                    } else {
+                        self.importRecordsFromSync(fetchedRecords)
+                    }
+                }
+            case .failure(let error):
+                DispatchQueue.main.async {
+                    self.syncLog.append("❌ Sync error: \(error.localizedDescription)")
+                    print("❌ Sync error: \(error.localizedDescription)")
+                }
+            }
+            
+            DispatchQueue.main.async {
+                self.isSyncing = false
+            }
+        }
+        
+        operation.fetchRecordZoneChangesResultBlock = { result in
+            switch result {
+            case .success:
+                break
+            case .failure(let error):
+                DispatchQueue.main.async {
+                    self.syncLog.append("❌ Overall sync error: \(error.localizedDescription)")
+                    print("❌ Overall sync error: \(error.localizedDescription)")
+                    self.isSyncing = false
+                }
+            }
+        }
+        
+        database.add(operation)
+    }
+    
+    private func importRecordsFromSync(_ records: [CKRecord]) {
+        let existingTitles = Set(items.map { $0.title })
+        var importedCount = 0
+        
+        for record in records {
+            guard let timestamp = record["CD_timestamp"] as? Date else { continue }
+            let title = (record["CD_title"] as? String) ?? ""
+            
+            if existingTitles.contains(title) && !title.isEmpty {
+                continue
+            }
+            
+            var imageData: Data? = nil
+            
+            if let asset = record["CD_imageData_ckAsset"] as? CKAsset,
+               let assetURL = asset.fileURL {
+                imageData = try? Data(contentsOf: assetURL)
+            } else if let bytes = record["CD_imageData"] as? Data {
+                imageData = bytes
+            }
+            
+            let newItem = Item(
+                timestamp: timestamp,
+                title: title,
+                imageData: imageData
+            )
+            
+            modelContext.insert(newItem)
+            importedCount += 1
+            syncLog.append("✅ Imported: \(title.isEmpty ? "Untitled" : title)")
+        }
+        
+        if importedCount > 0 {
+            do {
+                try modelContext.save()
+                syncLog.append("💾 Saved \(importedCount) new items")
+                print("✅ Sync complete: Imported \(importedCount) new items")
+            } catch {
+                syncLog.append("❌ Error saving: \(error.localizedDescription)")
+                print("❌ Error saving: \(error.localizedDescription)")
+            }
+        } else {
+            syncLog.append("✅ Already up to date")
+            print("✅ Sync complete: Already up to date")
         }
     }
     
@@ -317,118 +414,6 @@ struct TVContentView: View {
     }
 }
 
-// TEST MODE VIEW - Add sample photos directly on Apple TV
-struct TestModeView: View {
-    var modelContext: ModelContext
-    var items: [Item]
-    @Binding var showTestMode: Bool
-    
-    var body: some View {
-        VStack(spacing: 30) {
-            Text("Test Mode")
-                .font(.largeTitle)
-                .foregroundColor(.white)
-            
-            Text("Current Photos: \(items.count)")
-                .font(.title2)
-                .foregroundColor(.white.opacity(0.8))
-            
-            VStack(spacing: 20) {
-                Button("Add Red Test Photo") {
-                    addTestPhoto(color: .red, title: "Red Test Photo")
-                }
-                .buttonStyle(.borderedProminent)
-                .tint(.red)
-                
-                Button("Add Blue Test Photo") {
-                    addTestPhoto(color: .blue, title: "Blue Test Photo")
-                }
-                .buttonStyle(.borderedProminent)
-                .tint(.blue)
-                
-                Button("Add Green Test Photo") {
-                    addTestPhoto(color: .green, title: "Green Test Photo")
-                }
-                .buttonStyle(.borderedProminent)
-                .tint(.green)
-                
-                if !items.isEmpty {
-                    Button("Delete Last Photo") {
-                        deleteLastPhoto()
-                    }
-                    .buttonStyle(.bordered)
-                    .tint(.orange)
-                }
-            }
-            .padding()
-            
-            Button("Back to Display") {
-                showTestMode = false
-            }
-            .buttonStyle(.bordered)
-            .padding(.top, 20)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color.black)
-    }
-    
-    private func addTestPhoto(color: Color, title: String) {
-        // Create a simple colored image
-        let size = CGSize(width: 800, height: 600)
-        let renderer = UIGraphicsImageRenderer(size: size)
-        let image = renderer.image { context in
-            UIColor(color).setFill()
-            context.fill(CGRect(origin: .zero, size: size))
-            
-            // Add some text to make it interesting
-            let text = title as NSString
-            let attributes: [NSAttributedString.Key: Any] = [
-                .font: UIFont.systemFont(ofSize: 80, weight: .bold),
-                .foregroundColor: UIColor.white
-            ]
-            let textSize = text.size(withAttributes: attributes)
-            let textRect = CGRect(
-                x: (size.width - textSize.width) / 2,
-                y: (size.height - textSize.height) / 2,
-                width: textSize.width,
-                height: textSize.height
-            )
-            text.draw(in: textRect, withAttributes: attributes)
-        }
-        
-        if let imageData = image.jpegData(compressionQuality: 0.8) {
-            let newItem = Item(
-                timestamp: Date(),
-                title: title,
-                imageData: imageData
-            )
-            modelContext.insert(newItem)
-            print("📺 Apple TV: Added test photo - '\(title)'")
-            print("📺 Apple TV: Image size: \(imageData.count / 1024)KB")
-            
-            do {
-                try modelContext.save()
-                print("✅ Apple TV: Saved to SwiftData successfully")
-            } catch {
-                print("❌ Apple TV: Error saving: \(error)")
-            }
-        }
-    }
-    
-    private func deleteLastPhoto() {
-        guard let lastItem = items.first else { return }
-        modelContext.delete(lastItem)
-        print("📺 Apple TV: Deleted photo - '\(lastItem.title)'")
-        
-        do {
-            try modelContext.save()
-            print("✅ Apple TV: Deleted successfully")
-        } catch {
-            print("❌ Apple TV: Error deleting: \(error)")
-        }
-    }
-}
-
 // Photo slideshow component
 struct PhotoSlideshowView: View {
     let items: [Item]
@@ -514,8 +499,351 @@ struct BouncingLogoView: View {
     }
 }
 
-#Preview {
-    TVContentView()
-        .modelContainer(for: Item.self, inMemory: true)
+// Consolidated Debug View - combines SwiftData debug info and CloudKit diagnostics
+struct ConsolidatedDebugView: View {
+    @Environment(\.modelContext) private var modelContext
+    @Query(sort: \Item.timestamp, order: .reverse) private var items: [Item]
+    @State private var debugInfo: [String] = []
+    @State private var diagnosticResults: [String] = []
+    @State private var isRunningDiagnostics = false
+    @State private var selectedTab = 0
+    @Environment(\.dismiss) var dismiss
+    
+    var body: some View {
+        ZStack {
+            Color.black.ignoresSafeArea()
+            
+            VStack(spacing: 20) {
+                Text("Debug & Diagnostics")
+                    .font(.largeTitle)
+                    .foregroundColor(.white)
+                    .padding(.top)
+                
+                // Tab selector
+                Picker("View", selection: $selectedTab) {
+                    Text("SwiftData Debug").tag(0)
+                    Text("CloudKit Diagnostics").tag(1)
+                }
+                .pickerStyle(.segmented)
+                .padding(.horizontal, 40)
+                
+                ScrollView {
+                    if selectedTab == 0 {
+                        // SwiftData Debug View
+                        VStack(alignment: .leading, spacing: 15) {
+                            Text("Items Count: \(items.count)")
+                                .font(.title)
+                                .foregroundColor(.green)
+                            
+                            Divider().background(Color.white)
+                            
+                            if items.isEmpty {
+                                Text("No items found in SwiftData")
+                                    .foregroundColor(.red)
+                                    .font(.title3)
+                            } else {
+                                Text("Items from @Query:")
+                                    .font(.title2)
+                                    .foregroundColor(.white)
+                                
+                                ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
+                                    VStack(alignment: .leading, spacing: 5) {
+                                        Text("\(index + 1). \(item.title.isEmpty ? "Untitled" : item.title)")
+                                            .font(.body)
+                                            .foregroundColor(.white)
+                                        Text("   Date: \(item.timestamp.formatted())")
+                                            .font(.caption)
+                                            .foregroundColor(.gray)
+                                        Text("   Has image: \(item.imageData != nil ? "Yes (\(item.imageData?.count ?? 0) bytes)" : "No")")
+                                            .font(.caption)
+                                            .foregroundColor(.gray)
+                                    }
+                                    .padding(.vertical, 5)
+                                }
+                            }
+                            
+                            if !debugInfo.isEmpty {
+                                Divider().background(Color.white)
+                                Text("Debug Log:")
+                                    .font(.title3)
+                                    .foregroundColor(.white)
+                                ForEach(debugInfo, id: \.self) { info in
+                                    Text(info)
+                                        .font(.caption)
+                                        .foregroundColor(.yellow)
+                                }
+                            }
+                        }
+                        .padding()
+                    } else {
+                        // CloudKit Diagnostics View
+                        VStack(alignment: .leading, spacing: 10) {
+                            if diagnosticResults.isEmpty {
+                                Text("Press 'Run Diagnostics' to check iCloud status")
+                                    .foregroundColor(.white.opacity(0.7))
+                                    .font(.title3)
+                                    .padding()
+                            } else {
+                                ForEach(diagnosticResults, id: \.self) { result in
+                                    Text(result)
+                                        .font(.system(.body, design: .monospaced))
+                                        .foregroundColor(.white)
+                                        .padding(.horizontal)
+                                }
+                            }
+                        }
+                    }
+                }
+                .frame(maxHeight: 600)
+                
+                // Action buttons
+                HStack(spacing: 30) {
+                    Button("Back") {
+                        dismiss()
+                    }
+                    .buttonStyle(.bordered)
+                    
+                    if selectedTab == 0 {
+                        Button("Refresh") {
+                            refreshDebugInfo()
+                        }
+                        .buttonStyle(.borderedProminent)
+                    } else {
+                        Button(action: runDiagnostics) {
+                            if isRunningDiagnostics {
+                                HStack {
+                                    ProgressView()
+                                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                    Text("Running...")
+                                }
+                            } else {
+                                Text("Run Diagnostics")
+                            }
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .disabled(isRunningDiagnostics)
+                    }
+                }
+                .padding()
+            }
+            .padding()
+        }
+        .onAppear {
+            print("🔍 Debug view appeared - Items: \(items.count)")
+        }
+    }
+    
+    private func refreshDebugInfo() {
+        debugInfo.removeAll()
+        do {
+            try modelContext.save()
+            debugInfo.append("✅ Context refreshed")
+            print("🔍 Items count: \(items.count)")
+            for (index, item) in items.enumerated() {
+                print("🔍 Item \(index + 1): '\(item.title)' - \(item.timestamp)")
+            }
+        } catch {
+            debugInfo.append("❌ Error: \(error.localizedDescription)")
+        }
+    }
+    
+    private func runDiagnostics() {
+        isRunningDiagnostics = true
+        diagnosticResults = []
+        
+        addResult("📺 Starting Apple TV Diagnostics...")
+        addResult("")
+        
+        addResult("📱 CHECK 1: iCloud Account")
+        checkiCloudAccountStatus()
+        
+        addResult("")
+        addResult("☁️ CHECK 2: CloudKit Container")
+        checkCloudKitContainer()
+        
+        addResult("")
+        addResult("🌐 CHECK 3: Network")
+        checkNetworkStatus()
+        
+        addResult("")
+        addResult("🔒 CHECK 4: CloudKit Permissions")
+        checkCloudKitPermissions()
+        
+        addResult("")
+        addResult("🔍 CHECK 5: Fetching Records")
+        checkRecords()
+        
+        addResult("")
+        addResult("✅ Diagnostics Complete!")
+        
+        isRunningDiagnostics = false
+    }
+    
+    private func checkiCloudAccountStatus() {
+        let container = CKContainer.default()
+        let group = DispatchGroup()
+        
+        group.enter()
+        container.accountStatus { status, error in
+            defer { group.leave() }
+            
+            if let error = error {
+                addResult("❌ Error: \(error.localizedDescription)")
+                return
+            }
+            
+            switch status {
+            case .available:
+                addResult("✅ iCloud Account: Available")
+            case .noAccount:
+                addResult("❌ iCloud Account: NOT SIGNED IN")
+                addResult("   → Go to Settings and sign into iCloud")
+            case .restricted:
+                addResult("⚠️ iCloud Account: Restricted")
+            case .couldNotDetermine:
+                addResult("❓ iCloud Account: Could not determine")
+            case .temporarilyUnavailable:
+                addResult("⏳ iCloud Account: Temporarily unavailable")
+            @unknown default:
+                addResult("❓ iCloud Account: Unknown status")
+            }
+        }
+        
+        group.wait()
+    }
+    
+    private func checkCloudKitContainer() {
+        let container = CKContainer.default()
+        addResult("Container ID: \(container.containerIdentifier ?? "none")")
+        
+        let group = DispatchGroup()
+        group.enter()
+        
+        let database = container.privateCloudDatabase
+        let zoneID = CKRecordZone.ID(zoneName: "com.apple.coredata.cloudkit.zone", ownerName: CKCurrentUserDefaultName)
+        let query = CKQuery(recordType: "CD_Item", predicate: NSPredicate(value: true))
+        
+        database.perform(query, inZoneWith: zoneID) { records, error in
+            defer { group.leave() }
+            
+            if let error = error as? CKError {
+                switch error.code {
+                case .notAuthenticated:
+                    addResult("❌ Not authenticated with CloudKit")
+                case .networkUnavailable, .networkFailure:
+                    addResult("❌ Network error: \(error.localizedDescription)")
+                case .zoneNotFound:
+                    addResult("⚠️ SwiftData zone not found yet")
+                    addResult("   → Add a photo from iPhone first")
+                default:
+                    addResult("⚠️ CloudKit error: \(error.localizedDescription)")
+                }
+            } else {
+                addResult("✅ CloudKit Container: Accessible")
+                addResult("   Found \(records?.count ?? 0) records")
+            }
+        }
+        
+        group.wait()
+    }
+    
+    private func checkNetworkStatus() {
+        if let url = URL(string: "https://www.apple.com") {
+            let semaphore = DispatchSemaphore(value: 0)
+            let task = URLSession.shared.dataTask(with: url) { _, _, error in
+                if error != nil {
+                    addResult("❌ No internet connection")
+                } else {
+                    addResult("✅ Internet: Connected")
+                }
+                semaphore.signal()
+            }
+            task.resume()
+            semaphore.wait()
+        }
+    }
+    
+    private func checkCloudKitPermissions() {
+        let container = CKContainer.default()
+        let group = DispatchGroup()
+        
+        group.enter()
+        container.requestApplicationPermission(.userDiscoverability) { status, error in
+            defer { group.leave() }
+            
+            if let error = error {
+                addResult("⚠️ Permission check error: \(error.localizedDescription)")
+            } else {
+                switch status {
+                case .granted:
+                    addResult("✅ CloudKit Permissions: Granted")
+                case .denied:
+                    addResult("❌ CloudKit Permissions: Denied")
+                case .couldNotComplete:
+                    addResult("⚠️ CloudKit Permissions: Could not complete")
+                case .initialState:
+                    addResult("ℹ️ CloudKit Permissions: Not requested yet")
+                @unknown default:
+                    addResult("❓ CloudKit Permissions: Unknown")
+                }
+            }
+        }
+        
+        group.wait()
+    }
+    
+    private func checkRecords() {
+        let container = CKContainer.default()
+        let database = container.privateCloudDatabase
+        let group = DispatchGroup()
+        
+        group.enter()
+        
+        let zoneID = CKRecordZone.ID(zoneName: "com.apple.coredata.cloudkit.zone", ownerName: CKCurrentUserDefaultName)
+        let query = CKQuery(recordType: "CD_Item", predicate: NSPredicate(value: true))
+        
+        database.perform(query, inZoneWith: zoneID) { records, error in
+            defer { group.leave() }
+            
+            if let error = error as? CKError {
+                addResult("❌ Query failed: \(error.localizedDescription)")
+                if error.code == .zoneNotFound {
+                    addResult("   💡 HINT: Add photos from iPhone first")
+                }
+            } else if let records = records {
+                addResult("✅ Successfully fetched \(records.count) records")
+                
+                if records.isEmpty {
+                    addResult("   ℹ️ No photos found yet")
+                } else {
+                    addResult("   📸 Photos found:")
+                    for (index, record) in records.prefix(5).enumerated() {
+                        if let title = record["CD_title"] as? String {
+                            addResult("   \(index + 1). \(title.isEmpty ? "Untitled" : title)")
+                        }
+                    }
+                    if records.count > 5 {
+                        addResult("   ... and \(records.count - 5) more")
+                    }
+                }
+            }
+        }
+        
+        group.wait()
+    }
+    
+    private func addResult(_ text: String) {
+        DispatchQueue.main.async {
+            diagnosticResults.append(text)
+        }
+    }
 }
+
+struct TVContentView_Previews: PreviewProvider {
+    static var previews: some View {
+        TVContentView()
+            .modelContainer(for: Item.self, inMemory: true)
+    }
+}
+
 #endif
