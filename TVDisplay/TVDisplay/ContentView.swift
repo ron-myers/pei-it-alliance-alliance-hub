@@ -1,4 +1,30 @@
+//
+//  ContentView.swift
+//  TVDisplay
+//
+//  Created by RH Lee on 24/10/2025.
+//
+/*
+import SwiftUI
 
+struct ContentView: View {
+    var body: some View {
+        VStack {
+            Image("PIA logo-01")
+                .resizable()
+                .scaledToFit()
+            Text("Welcome to the Foundry").font((.title))
+        }
+        .padding()
+        .preferredColorScheme(ColorScheme.light)
+        
+    }
+}
+
+#Preview {
+    ContentView()
+}
+*/
 //  ContentView.swift
 //  TVDisplay
 //
@@ -157,15 +183,23 @@ struct ContentView: View {
                 velocity.y = abs(velocity.y)
                 logoPosition.y = minY
                 hitVertical = true
-                // CHANGE 1: Add random variation to prevent fixed path
-                velocity.x += CGFloat.random(in: -1.0...1.0)
+                // CHANGE 1: Add random angle variation while maintaining constant speed
+                velocity.x += CGFloat.random(in: -0.5...0.5)
+                // Normalize to maintain constant speed of 3.0
+                let currentSpeed = sqrt(velocity.x * velocity.x + velocity.y * velocity.y)
+                velocity.x = (velocity.x / currentSpeed) * 3.0
+                velocity.y = (velocity.y / currentSpeed) * 3.0
             } else if logoPosition.y >= maxY {
                 print("Hit bottom! maxY=\(maxY), logoPosition.y=\(logoPosition.y)")
                 velocity.y = -abs(velocity.y)
                 logoPosition.y = maxY
                 hitVertical = true
-                // CHANGE 1: Add random variation to prevent fixed path
-                velocity.x += CGFloat.random(in: -1.0...1.0)
+                // CHANGE 1: Add random angle variation while maintaining constant speed
+                velocity.x += CGFloat.random(in: -0.5...0.5)
+                // Normalize to maintain constant speed of 3.0
+                let currentSpeed = sqrt(velocity.x * velocity.x + velocity.y * velocity.y)
+                velocity.x = (velocity.x / currentSpeed) * 3.0
+                velocity.y = (velocity.y / currentSpeed) * 3.0
             }
             
             // Bounce off left/right edges
@@ -174,15 +208,23 @@ struct ContentView: View {
                 velocity.x = abs(velocity.x)
                 logoPosition.x = minX
                 hitHorizontal = true
-                // CHANGE 1: Add random variation to prevent fixed path
-                velocity.y += CGFloat.random(in: -1.0...1.0)
+                // CHANGE 1: Add random angle variation while maintaining constant speed
+                velocity.y += CGFloat.random(in: -0.5...0.5)
+                // Normalize to maintain constant speed of 3.0
+                let currentSpeed = sqrt(velocity.x * velocity.x + velocity.y * velocity.y)
+                velocity.x = (velocity.x / currentSpeed) * 3.0
+                velocity.y = (velocity.y / currentSpeed) * 3.0
             } else if logoPosition.x >= maxX {
                 print("Hit right! maxX=\(maxX), logoPosition.x=\(logoPosition.x)")
                 velocity.x = -abs(velocity.x)
                 logoPosition.x = maxX
                 hitHorizontal = true
-                // CHANGE 1: Add random variation to prevent fixed path
-                velocity.y += CGFloat.random(in: -1.0...1.0)
+                // CHANGE 1: Add random angle variation while maintaining constant speed
+                velocity.y += CGFloat.random(in: -0.5...0.5)
+                // Normalize to maintain constant speed of 3.0
+                let currentSpeed = sqrt(velocity.x * velocity.x + velocity.y * velocity.y)
+                velocity.x = (velocity.x / currentSpeed) * 3.0
+                velocity.y = (velocity.y / currentSpeed) * 3.0
             }
             print("GCS: X=\(logoPosition.x) Y=\(logoPosition.y)")
             // Check if corner was hit (both edges at once)
