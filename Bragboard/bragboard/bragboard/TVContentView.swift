@@ -302,7 +302,7 @@ struct TVContentView: View {
         // Switch to bouncing screensaver after 5 minutes of showing slideshow
         // Set to longer time or comment out if you don't want screensaver mode
         DispatchQueue.main.asyncAfter(deadline: .now() + 300) {  // 300 seconds = 5 minutes
-            showBouncing = true
+            showBouncing = false
             startBouncingAnimation()
         }
     }
