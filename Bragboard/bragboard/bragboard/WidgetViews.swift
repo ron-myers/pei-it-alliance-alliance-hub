@@ -218,6 +218,145 @@ struct LocationMapWidgetView: View {
     }
 }
 
+// MARK: - Years in Business Widget
+struct YearsInBusinessWidgetView: View {
+    let widget: Widget
+    
+    private var yearsInBusiness: Int {
+        guard let startDate = widget.configuration?.startDate else { return 0 }
+        let calendar = Calendar.current
+        let years = calendar.dateComponents([.year], from: startDate, to: Date()).year ?? 0
+        return max(0, years)
+    }
+    
+    var body: some View {
+        VStack(spacing: 20) {
+            // Calendar icon
+            ZStack {
+                Circle()
+                    .fill(Color.blue.opacity(0.3))
+                    .frame(width: 120, height: 120)
+                
+                Image(systemName: "calendar.badge.clock")
+                    .font(.system(size: 60))
+                    .foregroundColor(.blue)
+            }
+            
+            // Years count
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text("\(yearsInBusiness)")
+                    .font(.system(size: 72, weight: .bold, design: .rounded))
+                    .foregroundColor(.white)
+                
+                Text(yearsInBusiness == 1 ? "Year" : "Years")
+                    .font(.system(size: 36, weight: .medium))
+                    .foregroundColor(.white.opacity(0.8))
+            }
+            
+            Text("In Business")
+                .font(.title2)
+                .foregroundColor(.white.opacity(0.8))
+            
+            // Start date display
+            if let startDate = widget.configuration?.startDate {
+                Text("Since \(startDate.formatted(date: .abbreviated, time: .omitted))")
+                    .font(.subheadline)
+                    .foregroundColor(.white.opacity(0.6))
+                    .padding(.top, 8)
+            } else {
+                Text("Set start date to begin")
+                    .font(.subheadline)
+                    .foregroundColor(.yellow)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 4)
+                    .background(Color.yellow.opacity(0.2))
+                    .cornerRadius(8)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(40)
+        .background {
+            LinearGradient(
+                colors: [Color.blue.opacity(0.3), Color.cyan.opacity(0.3)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        }
+    }
+}
+
+// MARK: - Days Since Incident Widget
+struct DaysSinceIncidentWidgetView: View {
+    let widget: Widget
+    
+    private var daysSinceIncident: Int {
+        guard let incidentDate = widget.configuration?.incidentDate else { return 0 }
+        let calendar = Calendar.current
+        let days = calendar.dateComponents([.day], from: incidentDate, to: Date()).day ?? 0
+        return max(0, days)
+    }
+    
+    private var incidentLabel: String {
+        widget.configuration?.incidentLabel ?? "Last Incident"
+    }
+    
+    var body: some View {
+        VStack(spacing: 20) {
+            // Safety shield icon
+            ZStack {
+                Circle()
+                    .fill(Color.green.opacity(0.3))
+                    .frame(width: 120, height: 120)
+                
+                Image(systemName: "checkmark.shield.fill")
+                    .font(.system(size: 60))
+                    .foregroundColor(.green)
+            }
+            
+            // Days count
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text("\(daysSinceIncident)")
+                    .font(.system(size: 72, weight: .bold, design: .rounded))
+                    .foregroundColor(.white)
+                
+                Text(daysSinceIncident == 1 ? "Day" : "Days")
+                    .font(.system(size: 36, weight: .medium))
+                    .foregroundColor(.white.opacity(0.8))
+            }
+            
+            Text("Since \(incidentLabel)")
+                .font(.title2)
+                .foregroundColor(.white.opacity(0.8))
+                .multilineTextAlignment(.center)
+            
+            // Incident date display
+            if let incidentDate = widget.configuration?.incidentDate {
+                Text("Last: \(incidentDate.formatted(date: .abbreviated, time: .omitted))")
+                    .font(.subheadline)
+                    .foregroundColor(.white.opacity(0.6))
+                    .padding(.top, 8)
+            } else {
+                Text("Set incident date to begin")
+                    .font(.subheadline)
+                    .foregroundColor(.yellow)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 4)
+                    .background(Color.yellow.opacity(0.2))
+                    .cornerRadius(8)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(40)
+        .background {
+            LinearGradient(
+                colors: [Color.green.opacity(0.3), Color.mint.opacity(0.3)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        }
+    }
+}
+
 // MARK: - Placeholder Widget (for unimplemented types)
 struct PlaceholderWidgetView: View {
     let widget: Widget
@@ -266,6 +405,12 @@ func createWidgetView(for widget: Widget) -> some View {
         
     case .locationsMap:
         LocationMapWidgetView(widget: widget)
+        
+    case .yearsInBusiness:
+        YearsInBusinessWidgetView(widget: widget)
+        
+    case .daysSinceIncident:
+        DaysSinceIncidentWidgetView(widget: widget)
         
     // TODO: Implement remaining widgets
     default:
