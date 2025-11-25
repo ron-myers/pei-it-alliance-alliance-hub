@@ -55,6 +55,10 @@ final class WidgetConfiguration {
     var counterLabel: String = ""
     var startDate: Date?
     
+    // Incident tracking
+    var incidentDate: Date?
+    var incidentLabel: String = "Last Incident"
+    
     // Text widgets
     var textContent: String = ""
     var textItems: [String] = []  // For rotating text
@@ -203,7 +207,8 @@ enum WidgetType: String, Codable, CaseIterable {
     
     var isImplemented: Bool {
         switch self {
-        case .companyLogo, .customerCount, .instagramFollowers, .locationsMap:
+        case .companyLogo, .customerCount, .instagramFollowers, .locationsMap,
+             .yearsInBusiness, .daysSinceIncident:
             return true
         default:
             return false

@@ -205,6 +205,11 @@ struct AddWidgetView: View {
         case .locationsMap:
             config.locationNames = MockDataService.shared.getLocationNames()
             config.locationCount = MockDataService.shared.getLocationCount()
+        case .yearsInBusiness:
+            config.startDate = Date()
+        case .daysSinceIncident:
+            config.incidentDate = Date()
+            config.incidentLabel = "Last Incident"
         default:
             break
         }
@@ -283,6 +288,12 @@ struct WidgetConfigView: View {
             
         case .locationsMap:
             locationConfiguration
+            
+        case .yearsInBusiness:
+            yearsInBusinessConfiguration
+            
+        case .daysSinceIncident:
+            daysSinceIncidentConfiguration
             
         default:
             Section("Configuration") {
@@ -431,6 +442,127 @@ struct WidgetConfigView: View {
                     Image(systemName: "mappin.circle.fill")
                         .foregroundColor(.green)
                     Text(location)
+                }
+            }
+        }
+    }
+    
+    private var yearsInBusinessConfiguration: some View {
+        Section("Business Start Date") {
+            DatePicker(
+                "Founded",
+                selection: Binding(
+                    get: { widget.configuration?.startDate ?? Date() },
+                    set: { newValue in
+                        ensureConfiguration()
+                        widget.configuration?.startDate = newValue
+                    }
+                ),
+                displayedComponents: [.date]
+            )
+            .datePickerStyle(.graphical)
+            
+            if let startDate = widget.configuration?.startDate {
+                let years = Calendar.current.dateComponents([.year], from: startDate, to: Date()).year ?? 0
+                
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Preview")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    
+                    HStack(alignment: .firstTextBaseline, spacing: 4) {
+                        Text("\(max(0, years))")
+                            .font(.system(size: 40, weight: .bold, design: .rounded))
+                            .foregroundColor(.blue)
+                        Text(years == 1 ? "Year" : "Years")
+                            .font(.title3)
+                            .foregroundColor(.secondary)
+                    }
+                    
+                    Text("Since \(startDate.formatted(date: .abbreviated, time: .omitted))")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+                .padding()
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color.blue.opacity(0.1))
+                .cornerRadius(12)
+            }
+        }
+    }
+    
+    private var daysSinceIncidentConfiguration: some View {
+        Group {
+            Section("Incident Label") {
+                TextField("e.g. Last Workplace Accident", text: Binding(
+                    get: { widget.configuration?.incidentLabel ?? "Last Incident" },
+                    set: { newValue in
+                        ensureConfiguration()
+                        widget.configuration?.incidentLabel = newValue
+                    }
+                ))
+                .textFieldStyle(.roundedBorder)
+                
+                // Quick label suggestions
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Quick Labels")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 8) {
+                            ForEach(["Last Workplace Accident", "Last Safety Incident", "Last Customer Complaint", "Last Downtime", "Last Error"], id: \.self) { suggestion in
+                                Button(suggestion) {
+                                    ensureConfiguration()
+                                    widget.configuration?.incidentLabel = suggestion
+                                }
+                                .buttonStyle(.bordered)
+                                .font(.caption)
+                            }
+                        }
+                    }
+                }
+            }
+            
+            Section("Last Incident Date") {
+                DatePicker(
+                    "Date",
+                    selection: Binding(
+                        get: { widget.configuration?.incidentDate ?? Date() },
+                        set: { newValue in
+                            ensureConfiguration()
+                            widget.configuration?.incidentDate = newValue
+                        }
+                    ),
+                    displayedComponents: [.date]
+                )
+                .datePickerStyle(.graphical)
+                
+                if let incidentDate = widget.configuration?.incidentDate {
+                    let days = Calendar.current.dateComponents([.day], from: incidentDate, to: Date()).day ?? 0
+                    
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Preview")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                        
+                        HStack(alignment: .firstTextBaseline, spacing: 4) {
+                            Text("\(max(0, days))")
+                                .font(.system(size: 40, weight: .bold, design: .rounded))
+                                .foregroundColor(.green)
+                            Text(days == 1 ? "Day" : "Days")
+                                .font(.title3)
+                                .foregroundColor(.secondary)
+                        }
+                        
+                        Text("Since \(widget.configuration?.incidentLabel ?? "Last Incident")")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                    .padding()
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color.green.opacity(0.1))
+                    .cornerRadius(12)
                 }
             }
         }
