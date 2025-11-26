@@ -3,7 +3,7 @@
 //  bragboard
 //
 //  Apple TV dashboard displaying all enabled widgets
-//  With manual CloudKit sync support
+//  With manual CloudKit sync support and dark/light mode adaptation
 //
 
 #if os(tvOS)
@@ -11,8 +11,10 @@ import SwiftUI
 import SwiftData
 import CloudKit
 
+// MARK: - Main Dashboard View
 struct TVDashboardView: View {
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.colorScheme) private var colorScheme
     @Query(sort: \Widget.position) private var allWidgets: [Widget]
     
     @State private var lastRefresh = Date()
@@ -24,11 +26,16 @@ struct TVDashboardView: View {
         allWidgets.filter { $0.isEnabled }
     }
     
+    // Dynamic background color based on theme
+    private var backgroundColor: Color {
+        colorScheme == .dark ? Color.black : Color(white: 0.95)
+    }
+    
     var body: some View {
         NavigationStack {
             ZStack {
-                // Background
-                Color.black.ignoresSafeArea()
+                // Dynamic background
+                backgroundColor.ignoresSafeArea()
                 
                 if allWidgets.isEmpty && !isSyncing {
                     // No widgets at all - need to sync or add from iPhone
@@ -60,22 +67,25 @@ struct TVDashboardView: View {
             // Top bar with sync controls
             topBar
             
-            // Widget grid
+            // Widget grid - 3 columns, 2 rows = 6 widgets max
             ScrollView {
                 LazyVGrid(
                     columns: [
-                        GridItem(.adaptive(minimum: 500, maximum: 700), spacing: 40)
+                        GridItem(.flexible(), spacing: 30),
+                        GridItem(.flexible(), spacing: 30),
+                        GridItem(.flexible(), spacing: 30)
                     ],
-                    spacing: 40
+                    spacing: 30
                 ) {
                     ForEach(enabledWidgets) { widget in
-                        WidgetContainer {
-                            createWidgetView(for: widget)
+                        TVWidgetContainer {
+                            TVCreateWidgetView(for: widget)
                         }
-                        .frame(minHeight: 400)
+                        .frame(height: 400)
+                        .aspectRatio(1.4, contentMode: .fit)
                     }
                 }
-                .padding(60)
+                .padding(50)
             }
         }
     }
@@ -97,13 +107,13 @@ struct TVDashboardView: View {
             if !syncStatus.isEmpty {
                 Text(syncStatus)
                     .font(.caption)
-                    .foregroundColor(.gray)
+                    .foregroundColor(.secondary)
             }
             
             // Last refresh time
             Text("Updated: \(lastRefresh.formatted(date: .omitted, time: .shortened))")
                 .font(.caption)
-                .foregroundColor(.gray)
+                .foregroundColor(.secondary)
             
             // Sync button
             Button {
@@ -111,7 +121,7 @@ struct TVDashboardView: View {
             } label: {
                 if isSyncing {
                     ProgressView()
-                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                        .progressViewStyle(CircularProgressViewStyle(tint: .accentColor))
                 } else {
                     Label("Sync", systemImage: "arrow.triangle.2.circlepath")
                 }
@@ -122,7 +132,10 @@ struct TVDashboardView: View {
         }
         .padding(.horizontal, 60)
         .padding(.vertical, 20)
-        .background(Color.black.opacity(0.8))
+        .background(
+            (colorScheme == .dark ? Color.black : Color.white)
+                .opacity(0.8)
+        )
         .sheet(isPresented: $showingDebugInfo) {
             debugInfoSheet
         }
@@ -133,15 +146,15 @@ struct TVDashboardView: View {
         VStack(spacing: 30) {
             Image(systemName: "rectangle.3.group")
                 .font(.system(size: 120))
-                .foregroundColor(.gray)
+                .foregroundColor(.secondary)
             
             Text("No Widgets Found")
                 .font(.largeTitle)
-                .foregroundColor(.white)
+                .foregroundColor(.primary)
             
             Text("Add widgets from your iPhone app,\nthen tap Sync to load them here")
                 .font(.title3)
-                .foregroundColor(.white.opacity(0.7))
+                .foregroundColor(.secondary)
                 .multilineTextAlignment(.center)
             
             HStack(spacing: 30) {
@@ -150,7 +163,7 @@ struct TVDashboardView: View {
                 } label: {
                     if isSyncing {
                         ProgressView()
-                            .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                            .progressViewStyle(CircularProgressViewStyle(tint: .accentColor))
                             .frame(width: 100)
                     } else {
                         Label("Sync Now", systemImage: "arrow.triangle.2.circlepath")
@@ -183,15 +196,15 @@ struct TVDashboardView: View {
         VStack(spacing: 30) {
             Image(systemName: "eye.slash")
                 .font(.system(size: 100))
-                .foregroundColor(.gray)
+                .foregroundColor(.secondary)
             
             Text("All Widgets Disabled")
                 .font(.largeTitle)
-                .foregroundColor(.white)
+                .foregroundColor(.primary)
             
             Text("You have \(allWidgets.count) widget(s) but none are enabled.\nEnable widgets from your iPhone app.")
                 .font(.title3)
-                .foregroundColor(.white.opacity(0.7))
+                .foregroundColor(.secondary)
                 .multilineTextAlignment(.center)
             
             Button {
@@ -208,16 +221,16 @@ struct TVDashboardView: View {
     private var syncingView: some View {
         VStack(spacing: 30) {
             ProgressView()
-                .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                .progressViewStyle(CircularProgressViewStyle(tint: .accentColor))
                 .scaleEffect(2)
             
             Text("Syncing with iCloud...")
                 .font(.title)
-                .foregroundColor(.white)
+                .foregroundColor(.primary)
             
             Text(syncStatus)
                 .font(.caption)
-                .foregroundColor(.gray)
+                .foregroundColor(.secondary)
         }
     }
     
@@ -250,7 +263,7 @@ struct TVDashboardView: View {
                             ForEach(allWidgets) { widget in
                                 HStack {
                                     Image(systemName: widget.type.icon)
-                                        .foregroundColor(widget.isEnabled ? .green : .gray)
+                                        .foregroundColor(widget.isEnabled ? .green : .secondary)
                                     Text(widget.type.displayName)
                                     Spacer()
                                     Text(widget.isEnabled ? "ON" : "OFF")
@@ -283,7 +296,7 @@ struct TVDashboardView: View {
                 }
                 .padding(40)
             }
-            .background(Color.black)
+            .background(colorScheme == .dark ? Color.black : Color.white)
             .navigationTitle("Debug Info")
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
@@ -381,6 +394,454 @@ struct TVDashboardView: View {
                 }
             }
         }
+    }
+}
+
+// MARK: - Widget Container (Common styling)
+private struct TVWidgetContainer<Content: View>: View {
+    @Environment(\.colorScheme) private var colorScheme
+    let content: Content
+    
+    init(@ViewBuilder content: () -> Content) {
+        self.content = content()
+    }
+    
+    var body: some View {
+        content
+            .background(
+                (colorScheme == .dark ? Color.black : Color.white)
+                    .opacity(colorScheme == .dark ? 0.2 : 0.8)
+            )
+            .cornerRadius(24)
+            .shadow(
+                color: colorScheme == .dark
+                    ? Color.black.opacity(0.3)
+                    : Color.black.opacity(0.1),
+                radius: 10,
+                x: 0,
+                y: 5
+            )
+    }
+}
+
+// MARK: - Widget Factory
+@ViewBuilder
+private func TVCreateWidgetView(for widget: Widget) -> some View {
+    switch widget.type {
+    case .companyLogo:
+        TVLogoWidgetView(widget: widget)
+        
+    case .customerCount:
+        TVCustomerCounterWidgetView(widget: widget)
+        
+    case .instagramFollowers:
+        TVInstagramFollowersWidgetView(widget: widget)
+        
+    case .locationsMap:
+        TVLocationMapWidgetView(widget: widget)
+        
+    case .yearsInBusiness:
+        TVYearsInBusinessWidgetView(widget: widget)
+        
+    case .daysSinceIncident:
+        TVDaysSinceIncidentWidgetView(widget: widget)
+        
+    default:
+        TVPlaceholderWidgetView(widget: widget)
+    }
+}
+
+// MARK: - Company Logo Widget
+private struct TVLogoWidgetView: View {
+    let widget: Widget
+    
+    var body: some View {
+        VStack {
+            Spacer()
+            if let imageData = widget.configuration?.imageData,
+               let uiImage = UIImage(data: imageData) {
+                Image(uiImage: uiImage)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(maxWidth: 280, maxHeight: 280)
+            } else {
+                // Placeholder
+                RoundedRectangle(cornerRadius: 16)
+                    .fill(Color.secondary.opacity(0.2))
+                    .frame(width: 200, height: 200)
+                    .overlay {
+                        VStack(spacing: 10) {
+                            Image(systemName: "building.2")
+                                .font(.system(size: 50))
+                                .foregroundColor(.secondary)
+                            Text("Add Logo")
+                                .font(.subheadline)
+                                .foregroundColor(.secondary)
+                        }
+                    }
+            }
+            Spacer()
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(24)
+    }
+}
+
+// MARK: - Customer Counter Widget
+private struct TVCustomerCounterWidgetView: View {
+    let widget: Widget
+    @Environment(\.colorScheme) private var colorScheme
+    
+    private var label: String {
+        let configLabel = widget.configuration?.counterLabel ?? ""
+        return configLabel.isEmpty ? "Customers Served" : configLabel
+    }
+    
+    var body: some View {
+        VStack(spacing: 16) {
+            Spacer()
+            
+            Text(MockDataService.formatNumber(
+                widget.configuration?.counterValue ?? 0,
+                style: .full
+            ))
+                .font(.system(size: 56, weight: .bold, design: .rounded))
+                .foregroundColor(.primary)
+                .minimumScaleFactor(0.5)
+                .lineLimit(1)
+            
+            Text(label)
+                .font(.title3)
+                .foregroundColor(.secondary)
+                .lineLimit(2)
+                .multilineTextAlignment(.center)
+            
+            Spacer()
+            
+            Image(systemName: "person.3.fill")
+                .font(.system(size: 32))
+                .foregroundColor(.blue.opacity(colorScheme == .dark ? 0.6 : 0.4))
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(24)
+        .background {
+            LinearGradient(
+                colors: [
+                    Color.blue.opacity(colorScheme == .dark ? 0.3 : 0.15),
+                    Color.purple.opacity(colorScheme == .dark ? 0.3 : 0.15)
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        }
+    }
+}
+
+// MARK: - Instagram Followers Widget
+private struct TVInstagramFollowersWidgetView: View {
+    let widget: Widget
+    @Environment(\.colorScheme) private var colorScheme
+    @State private var followerCount: Int = 0
+    
+    var body: some View {
+        VStack(spacing: 16) {
+            Spacer()
+            
+            ZStack {
+                RoundedRectangle(cornerRadius: 16)
+                    .fill(
+                        LinearGradient(
+                            colors: [.purple, .pink, .orange],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .frame(width: 80, height: 80)
+                
+                Image(systemName: "camera.fill")
+                    .font(.system(size: 40))
+                    .foregroundColor(.white)
+            }
+            
+            Text(MockDataService.formatNumber(followerCount))
+                .font(.system(size: 56, weight: .bold, design: .rounded))
+                .foregroundColor(.primary)
+                .minimumScaleFactor(0.5)
+                .lineLimit(1)
+            
+            Text("Instagram Followers")
+                .font(.title3)
+                .foregroundColor(.secondary)
+                .lineLimit(2)
+                .multilineTextAlignment(.center)
+            
+            Spacer()
+            
+            Text("SAMPLE DATA")
+                .font(.caption2)
+                .foregroundColor(.yellow)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 3)
+                .background(Color.yellow.opacity(0.2))
+                .cornerRadius(6)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(24)
+        .background(
+            (colorScheme == .dark ? Color.black : Color.white)
+                .opacity(colorScheme == .dark ? 0.3 : 0.5)
+        )
+        .onAppear {
+            followerCount = MockDataService.shared.getInstagramFollowers()
+        }
+    }
+}
+
+// MARK: - Location Map Widget
+private struct TVLocationMapWidgetView: View {
+    let widget: Widget
+    @Environment(\.colorScheme) private var colorScheme
+    @State private var locations: [String] = []
+    
+    var body: some View {
+        VStack(spacing: 16) {
+            Spacer()
+            
+            ZStack {
+                Circle()
+                    .fill(Color.green.opacity(colorScheme == .dark ? 0.3 : 0.2))
+                    .frame(width: 80, height: 80)
+                
+                Image(systemName: "map.fill")
+                    .font(.system(size: 40))
+                    .foregroundColor(.green)
+            }
+            
+            Text("\(locations.count)")
+                .font(.system(size: 56, weight: .bold, design: .rounded))
+                .foregroundColor(.primary)
+                .minimumScaleFactor(0.5)
+                .lineLimit(1)
+            
+            Text("Locations Worldwide")
+                .font(.title3)
+                .foregroundColor(.secondary)
+                .lineLimit(2)
+                .multilineTextAlignment(.center)
+            
+            Spacer()
+            
+            Text("SAMPLE DATA")
+                .font(.caption2)
+                .foregroundColor(.yellow)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 3)
+                .background(Color.yellow.opacity(0.2))
+                .cornerRadius(6)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(24)
+        .background {
+            LinearGradient(
+                colors: [
+                    Color.green.opacity(colorScheme == .dark ? 0.3 : 0.15),
+                    Color.teal.opacity(colorScheme == .dark ? 0.3 : 0.15)
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        }
+        .onAppear {
+            locations = MockDataService.shared.getLocationNames()
+        }
+    }
+}
+
+// MARK: - Years in Business Widget
+private struct TVYearsInBusinessWidgetView: View {
+    let widget: Widget
+    @Environment(\.colorScheme) private var colorScheme
+    
+    private var yearsInBusiness: Int {
+        guard let startDate = widget.configuration?.startDate else { return 0 }
+        let calendar = Calendar.current
+        let years = calendar.dateComponents([.year], from: startDate, to: Date()).year ?? 0
+        return max(0, years)
+    }
+    
+    var body: some View {
+        VStack(spacing: 16) {
+            Spacer()
+            
+            ZStack {
+                Circle()
+                    .fill(Color.blue.opacity(colorScheme == .dark ? 0.3 : 0.2))
+                    .frame(width: 80, height: 80)
+                
+                Image(systemName: "calendar.badge.clock")
+                    .font(.system(size: 40))
+                    .foregroundColor(.blue)
+            }
+            
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                Text("\(yearsInBusiness)")
+                    .font(.system(size: 56, weight: .bold, design: .rounded))
+                    .foregroundColor(.primary)
+                    .minimumScaleFactor(0.5)
+                    .lineLimit(1)
+                
+                Text(yearsInBusiness == 1 ? "Year" : "Years")
+                    .font(.system(size: 28, weight: .medium))
+                    .foregroundColor(.secondary)
+            }
+            
+            Text("In Business")
+                .font(.title3)
+                .foregroundColor(.secondary)
+                .lineLimit(1)
+            
+            Spacer()
+            
+            if let startDate = widget.configuration?.startDate {
+                Text("Since \(startDate.formatted(date: .abbreviated, time: .omitted))")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            } else {
+                Text("Set start date")
+                    .font(.caption)
+                    .foregroundColor(.yellow)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 3)
+                    .background(Color.yellow.opacity(0.2))
+                    .cornerRadius(6)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(24)
+        .background {
+            LinearGradient(
+                colors: [
+                    Color.blue.opacity(colorScheme == .dark ? 0.3 : 0.15),
+                    Color.cyan.opacity(colorScheme == .dark ? 0.3 : 0.15)
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        }
+    }
+}
+
+// MARK: - Days Since Incident Widget
+private struct TVDaysSinceIncidentWidgetView: View {
+    let widget: Widget
+    @Environment(\.colorScheme) private var colorScheme
+    
+    private var daysSinceIncident: Int {
+        guard let incidentDate = widget.configuration?.incidentDate else { return 0 }
+        let calendar = Calendar.current
+        let days = calendar.dateComponents([.day], from: incidentDate, to: Date()).day ?? 0
+        return max(0, days)
+    }
+    
+    private var incidentLabel: String {
+        widget.configuration?.incidentLabel ?? "Last Incident"
+    }
+    
+    var body: some View {
+        VStack(spacing: 16) {
+            Spacer()
+            
+            ZStack {
+                Circle()
+                    .fill(Color.green.opacity(colorScheme == .dark ? 0.3 : 0.2))
+                    .frame(width: 80, height: 80)
+                
+                Image(systemName: "checkmark.shield.fill")
+                    .font(.system(size: 40))
+                    .foregroundColor(.green)
+            }
+            
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                Text("\(daysSinceIncident)")
+                    .font(.system(size: 56, weight: .bold, design: .rounded))
+                    .foregroundColor(.primary)
+                    .minimumScaleFactor(0.5)
+                    .lineLimit(1)
+                
+                Text(daysSinceIncident == 1 ? "Day" : "Days")
+                    .font(.system(size: 28, weight: .medium))
+                    .foregroundColor(.secondary)
+            }
+            
+            Text("Since \(incidentLabel)")
+                .font(.title3)
+                .foregroundColor(.secondary)
+                .lineLimit(2)
+                .multilineTextAlignment(.center)
+            
+            Spacer()
+            
+            if let incidentDate = widget.configuration?.incidentDate {
+                Text("Last: \(incidentDate.formatted(date: .abbreviated, time: .omitted))")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            } else {
+                Text("Set incident date")
+                    .font(.caption)
+                    .foregroundColor(.yellow)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 3)
+                    .background(Color.yellow.opacity(0.2))
+                    .cornerRadius(6)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(24)
+        .background {
+            LinearGradient(
+                colors: [
+                    Color.green.opacity(colorScheme == .dark ? 0.3 : 0.15),
+                    Color.mint.opacity(colorScheme == .dark ? 0.3 : 0.15)
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        }
+    }
+}
+
+// MARK: - Placeholder Widget
+private struct TVPlaceholderWidgetView: View {
+    let widget: Widget
+    @Environment(\.colorScheme) private var colorScheme
+    
+    var body: some View {
+        VStack(spacing: 16) {
+            Spacer()
+            
+            Image(systemName: widget.type.icon)
+                .font(.system(size: 50))
+                .foregroundColor(.secondary)
+            
+            Text(widget.type.displayName)
+                .font(.title3)
+                .foregroundColor(.primary)
+                .lineLimit(2)
+                .multilineTextAlignment(.center)
+            
+            Spacer()
+            
+            Text("Coming Soon")
+                .font(.caption)
+                .foregroundColor(.secondary)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 6)
+                .background(Color.secondary.opacity(0.2))
+                .cornerRadius(6)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(24)
+        .background(Color.secondary.opacity(colorScheme == .dark ? 0.1 : 0.05))
     }
 }
 

@@ -21,6 +21,7 @@ struct LogoWidgetView: View {
     
     var body: some View {
         VStack {
+            Spacer()
             if let imageData = widget.configuration?.imageData {
                 #if os(iOS)
                 if let uiImage = UIImage(data: imageData) {
@@ -34,27 +35,29 @@ struct LogoWidgetView: View {
                     Image(uiImage: uiImage)
                         .resizable()
                         .scaledToFit()
-                        .frame(maxWidth: 600, maxHeight: 600)
+                        .frame(maxWidth: 280, maxHeight: 280)
                 }
                 #endif
             } else {
                 // Placeholder
-                RoundedRectangle(cornerRadius: 20)
+                RoundedRectangle(cornerRadius: 16)
                     .fill(Color.gray.opacity(0.2))
-                    .frame(width: 300, height: 300)
+                    .frame(width: 200, height: 200)
                     .overlay {
-                        VStack(spacing: 12) {
+                        VStack(spacing: 10) {
                             Image(systemName: "building.2")
-                                .font(.system(size: 60))
+                                .font(.system(size: 50))
                                 .foregroundColor(.gray)
-                            Text("Add Company Logo")
-                                .font(.headline)
+                            Text("Add Logo")
+                                .font(.subheadline)
                                 .foregroundColor(.secondary)
                         }
                     }
             }
+            Spacer()
         }
-        .padding()
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(24)
     }
 }
 
@@ -68,27 +71,35 @@ struct CustomerCounterWidgetView: View {
     }
     
     var body: some View {
-        VStack(spacing: 20) {
+        VStack(spacing: 16) {
+            Spacer()
+            
             // Counter value
             Text(MockDataService.formatNumber(
                 widget.configuration?.counterValue ?? 0,
                 style: .full
             ))
-                .font(.system(size: 72, weight: .bold, design: .rounded))
+                .font(.system(size: 56, weight: .bold, design: .rounded))
                 .foregroundColor(.white)
+                .minimumScaleFactor(0.5)
+                .lineLimit(1)
             
             // Custom label
             Text(label)
-                .font(.title2)
+                .font(.title3)
                 .foregroundColor(.white.opacity(0.8))
+                .lineLimit(2)
+                .multilineTextAlignment(.center)
+            
+            Spacer()
             
             // Decorative icon
             Image(systemName: "person.3.fill")
-                .font(.system(size: 40))
+                .font(.system(size: 32))
                 .foregroundColor(.blue.opacity(0.6))
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .padding(40)
+        .padding(24)
         .background {
             LinearGradient(
                 colors: [Color.blue.opacity(0.3), Color.purple.opacity(0.3)],
@@ -105,10 +116,12 @@ struct InstagramFollowersWidgetView: View {
     @State private var followerCount: Int = 0
     
     var body: some View {
-        VStack(spacing: 20) {
+        VStack(spacing: 16) {
+            Spacer()
+            
             // Instagram icon (simulated)
             ZStack {
-                RoundedRectangle(cornerRadius: 20)
+                RoundedRectangle(cornerRadius: 16)
                     .fill(
                         LinearGradient(
                             colors: [.purple, .pink, .orange],
@@ -116,34 +129,40 @@ struct InstagramFollowersWidgetView: View {
                             endPoint: .bottomTrailing
                         )
                     )
-                    .frame(width: 100, height: 100)
+                    .frame(width: 80, height: 80)
                 
                 Image(systemName: "camera.fill")
-                    .font(.system(size: 50))
+                    .font(.system(size: 40))
                     .foregroundColor(.white)
             }
             
             // Follower count
             Text(MockDataService.formatNumber(followerCount))
-                .font(.system(size: 60, weight: .bold, design: .rounded))
+                .font(.system(size: 56, weight: .bold, design: .rounded))
                 .foregroundColor(.white)
+                .minimumScaleFactor(0.5)
+                .lineLimit(1)
             
             // Label
             Text("Instagram Followers")
                 .font(.title3)
                 .foregroundColor(.white.opacity(0.8))
+                .lineLimit(2)
+                .multilineTextAlignment(.center)
+            
+            Spacer()
             
             // Mock data badge
             Text("SAMPLE DATA")
                 .font(.caption2)
                 .foregroundColor(.yellow)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 4)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 3)
                 .background(Color.yellow.opacity(0.2))
-                .cornerRadius(8)
+                .cornerRadius(6)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .padding(40)
+        .padding(24)
         .background(Color.black.opacity(0.3))
         .onAppear {
             // Load mock data
@@ -158,52 +177,46 @@ struct LocationMapWidgetView: View {
     @State private var locations: [String] = []
     
     var body: some View {
-        VStack(spacing: 24) {
+        VStack(spacing: 16) {
+            Spacer()
+            
             // Map icon
             ZStack {
                 Circle()
                     .fill(Color.green.opacity(0.3))
-                    .frame(width: 120, height: 120)
+                    .frame(width: 80, height: 80)
                 
                 Image(systemName: "map.fill")
-                    .font(.system(size: 60))
+                    .font(.system(size: 40))
                     .foregroundColor(.green)
             }
             
             // Location count
             Text("\(locations.count)")
-                .font(.system(size: 72, weight: .bold, design: .rounded))
+                .font(.system(size: 56, weight: .bold, design: .rounded))
                 .foregroundColor(.white)
+                .minimumScaleFactor(0.5)
+                .lineLimit(1)
             
             Text("Locations Worldwide")
-                .font(.title2)
+                .font(.title3)
                 .foregroundColor(.white.opacity(0.8))
+                .lineLimit(2)
+                .multilineTextAlignment(.center)
             
-            // Location list
-            VStack(alignment: .leading, spacing: 8) {
-                ForEach(locations, id: \.self) { location in
-                    HStack {
-                        Image(systemName: "mappin.circle.fill")
-                            .foregroundColor(.green)
-                        Text(location)
-                            .font(.subheadline)
-                            .foregroundColor(.white.opacity(0.9))
-                    }
-                }
-            }
-            .padding(.top, 8)
+            Spacer()
             
             // Mock data badge
             Text("SAMPLE DATA")
                 .font(.caption2)
                 .foregroundColor(.yellow)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 4)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 3)
                 .background(Color.yellow.opacity(0.2))
-                .cornerRadius(8)
+                .cornerRadius(6)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .padding(40)
+        .padding(24)
         .background {
             LinearGradient(
                 colors: [Color.green.opacity(0.3), Color.teal.opacity(0.3)],
@@ -230,51 +243,57 @@ struct YearsInBusinessWidgetView: View {
     }
     
     var body: some View {
-        VStack(spacing: 20) {
+        VStack(spacing: 16) {
+            Spacer()
+            
             // Calendar icon
             ZStack {
                 Circle()
                     .fill(Color.blue.opacity(0.3))
-                    .frame(width: 120, height: 120)
+                    .frame(width: 80, height: 80)
                 
                 Image(systemName: "calendar.badge.clock")
-                    .font(.system(size: 60))
+                    .font(.system(size: 40))
                     .foregroundColor(.blue)
             }
             
             // Years count
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
                 Text("\(yearsInBusiness)")
-                    .font(.system(size: 72, weight: .bold, design: .rounded))
+                    .font(.system(size: 56, weight: .bold, design: .rounded))
                     .foregroundColor(.white)
+                    .minimumScaleFactor(0.5)
+                    .lineLimit(1)
                 
                 Text(yearsInBusiness == 1 ? "Year" : "Years")
-                    .font(.system(size: 36, weight: .medium))
+                    .font(.system(size: 28, weight: .medium))
                     .foregroundColor(.white.opacity(0.8))
             }
             
             Text("In Business")
-                .font(.title2)
+                .font(.title3)
                 .foregroundColor(.white.opacity(0.8))
+                .lineLimit(1)
+            
+            Spacer()
             
             // Start date display
             if let startDate = widget.configuration?.startDate {
                 Text("Since \(startDate.formatted(date: .abbreviated, time: .omitted))")
-                    .font(.subheadline)
+                    .font(.caption)
                     .foregroundColor(.white.opacity(0.6))
-                    .padding(.top, 8)
             } else {
-                Text("Set start date to begin")
-                    .font(.subheadline)
+                Text("Set start date")
+                    .font(.caption)
                     .foregroundColor(.yellow)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 4)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 3)
                     .background(Color.yellow.opacity(0.2))
-                    .cornerRadius(8)
+                    .cornerRadius(6)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .padding(40)
+        .padding(24)
         .background {
             LinearGradient(
                 colors: [Color.blue.opacity(0.3), Color.cyan.opacity(0.3)],
@@ -301,52 +320,58 @@ struct DaysSinceIncidentWidgetView: View {
     }
     
     var body: some View {
-        VStack(spacing: 20) {
+        VStack(spacing: 16) {
+            Spacer()
+            
             // Safety shield icon
             ZStack {
                 Circle()
                     .fill(Color.green.opacity(0.3))
-                    .frame(width: 120, height: 120)
+                    .frame(width: 80, height: 80)
                 
                 Image(systemName: "checkmark.shield.fill")
-                    .font(.system(size: 60))
+                    .font(.system(size: 40))
                     .foregroundColor(.green)
             }
             
             // Days count
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
                 Text("\(daysSinceIncident)")
-                    .font(.system(size: 72, weight: .bold, design: .rounded))
+                    .font(.system(size: 56, weight: .bold, design: .rounded))
                     .foregroundColor(.white)
+                    .minimumScaleFactor(0.5)
+                    .lineLimit(1)
                 
                 Text(daysSinceIncident == 1 ? "Day" : "Days")
-                    .font(.system(size: 36, weight: .medium))
+                    .font(.system(size: 28, weight: .medium))
                     .foregroundColor(.white.opacity(0.8))
             }
             
             Text("Since \(incidentLabel)")
-                .font(.title2)
+                .font(.title3)
                 .foregroundColor(.white.opacity(0.8))
+                .lineLimit(2)
                 .multilineTextAlignment(.center)
+            
+            Spacer()
             
             // Incident date display
             if let incidentDate = widget.configuration?.incidentDate {
                 Text("Last: \(incidentDate.formatted(date: .abbreviated, time: .omitted))")
-                    .font(.subheadline)
+                    .font(.caption)
                     .foregroundColor(.white.opacity(0.6))
-                    .padding(.top, 8)
             } else {
-                Text("Set incident date to begin")
-                    .font(.subheadline)
+                Text("Set incident date")
+                    .font(.caption)
                     .foregroundColor(.yellow)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 4)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 3)
                     .background(Color.yellow.opacity(0.2))
-                    .cornerRadius(8)
+                    .cornerRadius(6)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .padding(40)
+        .padding(24)
         .background {
             LinearGradient(
                 colors: [Color.green.opacity(0.3), Color.mint.opacity(0.3)],
@@ -362,29 +387,31 @@ struct PlaceholderWidgetView: View {
     let widget: Widget
     
     var body: some View {
-        VStack(spacing: 20) {
+        VStack(spacing: 16) {
+            Spacer()
+            
             Image(systemName: widget.type.icon)
-                .font(.system(size: 60))
+                .font(.system(size: 50))
                 .foregroundColor(.gray)
             
             Text(widget.type.displayName)
-                .font(.title2)
+                .font(.title3)
                 .foregroundColor(.white)
+                .lineLimit(2)
+                .multilineTextAlignment(.center)
+            
+            Spacer()
             
             Text("Coming Soon")
-                .font(.subheadline)
-                .foregroundColor(.secondary)
-                .padding(.horizontal, 20)
-                .padding(.vertical, 8)
-                .background(Color.gray.opacity(0.2))
-                .cornerRadius(8)
-            
-            Text("TODO: Implement \(widget.type.category.rawValue) widget")
                 .font(.caption)
-                .foregroundColor(.yellow.opacity(0.7))
+                .foregroundColor(.secondary)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 6)
+                .background(Color.gray.opacity(0.2))
+                .cornerRadius(6)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .padding(40)
+        .padding(24)
         .background(Color.gray.opacity(0.1))
     }
 }
