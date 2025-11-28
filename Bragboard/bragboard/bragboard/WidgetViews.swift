@@ -3,6 +3,7 @@
 //  bragboard
 //
 //  Reusable view components for each widget type
+//  ✨ NEW: We're Hiring widget added
 //
 
 import SwiftUI
@@ -382,6 +383,74 @@ struct DaysSinceIncidentWidgetView: View {
     }
 }
 
+// MARK: - ✨ NEW: We're Hiring Badge Widget
+struct HiringBadgeWidgetView: View {
+    let widget: Widget
+    @State private var animationPhase = 0.0
+    
+    var body: some View {
+        VStack(spacing: 20) {
+            Spacer()
+            
+            // Animated icon with pulsing effect
+            ZStack {
+                Circle()
+                    .fill(Color.green.opacity(0.3))
+                    .frame(width: 100, height: 100)
+                    .scaleEffect(1 + sin(animationPhase) * 0.1)
+                
+                Image(systemName: "person.badge.plus.fill")
+                    .font(.system(size: 50))
+                    .foregroundColor(.green)
+            }
+            .onAppear {
+                withAnimation(.easeInOut(duration: 2).repeatForever(autoreverses: true)) {
+                    animationPhase = .pi * 2
+                }
+            }
+            
+            // Main message
+            Text("WE'RE HIRING!")
+                .font(.system(size: 48, weight: .bold, design: .rounded))
+                .foregroundColor(.white)
+                .lineLimit(1)
+                .minimumScaleFactor(0.5)
+            
+            // Subtitle
+            Text("Join Our Team")
+                .font(.title2)
+                .foregroundColor(.white.opacity(0.8))
+                .lineLimit(1)
+            
+            Spacer()
+            
+            // Professional badge
+            HStack(spacing: 8) {
+                Image(systemName: "sparkles")
+                    .font(.caption)
+                Text("Now Accepting Applications")
+                    .font(.caption)
+                Image(systemName: "sparkles")
+                    .font(.caption)
+            }
+            .foregroundColor(.green)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 8)
+            .background(Color.green.opacity(0.2))
+            .cornerRadius(20)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(24)
+        .background {
+            LinearGradient(
+                colors: [Color.green.opacity(0.3), Color.blue.opacity(0.3)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        }
+    }
+}
+
 // MARK: - Placeholder Widget (for unimplemented types)
 struct PlaceholderWidgetView: View {
     let widget: Widget
@@ -438,6 +507,9 @@ func createWidgetView(for widget: Widget) -> some View {
         
     case .daysSinceIncident:
         DaysSinceIncidentWidgetView(widget: widget)
+        
+    case .hiringBadge:
+        HiringBadgeWidgetView(widget: widget)
         
     // TODO: Implement remaining widgets
     default:

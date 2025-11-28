@@ -3,6 +3,7 @@
 //  bragboard
 //
 //  Core data models for widget system
+//  ✨ UPDATED: hiringBadge now implemented
 //
 
 import Foundation
@@ -90,6 +91,13 @@ enum WidgetType: String, Codable, CaseIterable {
     // Geographic - Mock Data
     case locationsMap = "locationsMap"
     
+    // Milestones
+    case yearsInBusiness = "yearsInBusiness"              // Auto-calculate from founding date
+    case daysSinceIncident = "daysSinceIncident"          // Safety counter
+    
+    // Team - ✨ NOW IMPLEMENTED
+    case hiringBadge = "hiringBadge"                      // "We're Hiring!" badge
+    
     // ========== TODO: FUTURE WIDGETS ==========
     
     // Social Media (pending API approval)
@@ -105,8 +113,6 @@ enum WidgetType: String, Codable, CaseIterable {
     case aggregateRating = "aggregateRating"              // TODO: Combined rating display
     
     // Milestones
-    case yearsInBusiness = "yearsInBusiness"              // TODO: Auto-calculate from founding date
-    case daysSinceIncident = "daysSinceIncident"          // TODO: Safety counter
     case customCounter = "customCounter"                  // TODO: Generic real-time counter
     
     // Achievements
@@ -124,7 +130,6 @@ enum WidgetType: String, Codable, CaseIterable {
     
     // Team
     case teamSize = "teamSize"                            // TODO: Team member count
-    case hiringBadge = "hiringBadge"                      // TODO: "We're Hiring!" toggle
     
     var displayName: String {
         switch self {
@@ -133,6 +138,9 @@ enum WidgetType: String, Codable, CaseIterable {
         case .customerCount: return "Customer Counter"
         case .instagramFollowers: return "Instagram Followers"
         case .locationsMap: return "Location Map"
+        case .yearsInBusiness: return "Years in Business"
+        case .daysSinceIncident: return "Days Since Incident"
+        case .hiringBadge: return "We're Hiring"
             
         // TODO
         case .youtubeSubscribers: return "YouTube Subscribers"
@@ -143,8 +151,6 @@ enum WidgetType: String, Codable, CaseIterable {
         case .yelpRating: return "Yelp Rating"
         case .appStoreRating: return "App Store Rating"
         case .aggregateRating: return "Aggregate Rating"
-        case .yearsInBusiness: return "Years in Business"
-        case .daysSinceIncident: return "Days Since Incident"
         case .customCounter: return "Custom Counter"
         case .achievements: return "Awards & Achievements"
         case .certifications: return "Certifications"
@@ -154,7 +160,6 @@ enum WidgetType: String, Codable, CaseIterable {
         case .announcement: return "Announcement"
         case .countriesServed: return "Countries Served"
         case .teamSize: return "Team Size"
-        case .hiringBadge: return "We're Hiring"
         }
     }
     
@@ -165,6 +170,9 @@ enum WidgetType: String, Codable, CaseIterable {
         case .customerCount: return "person.3"
         case .instagramFollowers: return "camera"
         case .locationsMap: return "map"
+        case .yearsInBusiness: return "calendar"
+        case .daysSinceIncident: return "checkmark.shield"
+        case .hiringBadge: return "person.badge.plus"
             
         // TODO
         case .youtubeSubscribers: return "play.rectangle"
@@ -175,8 +183,6 @@ enum WidgetType: String, Codable, CaseIterable {
         case .yelpRating: return "star.circle"
         case .appStoreRating: return "apps.iphone"
         case .aggregateRating: return "star.leadinghalf.filled"
-        case .yearsInBusiness: return "calendar"
-        case .daysSinceIncident: return "checkmark.shield"
         case .customCounter: return "number"
         case .achievements: return "trophy"
         case .certifications: return "seal"
@@ -186,7 +192,6 @@ enum WidgetType: String, Codable, CaseIterable {
         case .announcement: return "megaphone"
         case .countriesServed: return "globe"
         case .teamSize: return "person.2"
-        case .hiringBadge: return "person.badge.plus"
         }
     }
     
@@ -208,7 +213,7 @@ enum WidgetType: String, Codable, CaseIterable {
     var isImplemented: Bool {
         switch self {
         case .companyLogo, .customerCount, .instagramFollowers, .locationsMap,
-             .yearsInBusiness, .daysSinceIncident:
+             .yearsInBusiness, .daysSinceIncident, .hiringBadge:
             return true
         default:
             return false
@@ -228,3 +233,4 @@ enum WidgetCategory: String, CaseIterable {
     case geographic = "Geographic"
     case team = "Team"
 }
+

@@ -4,6 +4,7 @@
 //
 //  Apple TV dashboard displaying all enabled widgets
 //  With manual CloudKit sync support and dark/light mode adaptation
+//  ✨ NEW: Auto-shuffle widgets every 5 seconds to prevent screen burn
 //
 
 #if os(tvOS)
@@ -21,6 +22,10 @@ struct TVDashboardView: View {
     @State private var isSyncing = false
     @State private var syncStatus = ""
     @State private var showingDebugInfo = false
+    
+    // ✨ NEW: Shuffled widget positions for burn-in prevention
+    @State private var shuffledWidgets: [Widget] = []
+    @State private var shuffleTimer: Timer?
     
     var enabledWidgets: [Widget] {
         allWidgets.filter { $0.isEnabled }
@@ -55,8 +60,18 @@ struct TVDashboardView: View {
                 print("📺 TVDashboardView appeared")
                 print("📺 Total widgets: \(allWidgets.count), Enabled: \(enabledWidgets.count)")
                 
+                // Initial shuffle
+                shuffleWidgetPositions()
+                
+                // Start shuffle timer (every 5 seconds)
+                startShuffleTimer()
+                
                 // Auto-sync on appear
                 performCloudKitSync()
+            }
+            .onDisappear {
+                // Clean up timer
+                stopShuffleTimer()
             }
         }
     }
@@ -77,17 +92,45 @@ struct TVDashboardView: View {
                     ],
                     spacing: 30
                 ) {
-                    ForEach(enabledWidgets) { widget in
+                    // ✨ Use shuffled widgets instead of enabledWidgets
+                    ForEach(shuffledWidgets) { widget in
                         TVWidgetContainer {
                             TVCreateWidgetView(for: widget)
                         }
                         .frame(height: 400)
                         .aspectRatio(1.4, contentMode: .fit)
+                        // ✨ Smooth transition animation
+                        .transition(.opacity.combined(with: .scale(scale: 0.95)))
                     }
                 }
                 .padding(50)
+                // ✨ Animate position changes
+                .animation(.easeInOut(duration: 0.8), value: shuffledWidgets.map { $0.id })
             }
         }
+    }
+    
+    // MARK: - Widget Shuffle Logic
+    private func startShuffleTimer() {
+        // Cancel any existing timer
+        stopShuffleTimer()
+        
+        // Create new timer that fires every 5 seconds
+        shuffleTimer = Timer.scheduledTimer(withTimeInterval: 5.0, repeats: true) { _ in
+            shuffleWidgetPositions()
+        }
+    }
+    
+    private func stopShuffleTimer() {
+        shuffleTimer?.invalidate()
+        shuffleTimer = nil
+    }
+    
+    private func shuffleWidgetPositions() {
+        withAnimation {
+            shuffledWidgets = enabledWidgets.shuffled()
+        }
+        print("🔀 Shuffled \(shuffledWidgets.count) widgets to prevent burn-in")
     }
     
     // MARK: - Top Bar
@@ -237,69 +280,53 @@ struct TVDashboardView: View {
     // MARK: - Debug Sheet
     private var debugInfoSheet: some View {
         NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 20) {
-                    // Widget counts
-                    Section {
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("Total Widgets: \(allWidgets.count)")
-                            Text("Enabled Widgets: \(enabledWidgets.count)")
-                            Text("Last Sync: \(lastRefresh.formatted())")
-                        }
-                        .font(.body)
-                    } header: {
-                        Text("Widget Status")
-                            .font(.headline)
-                    }
-                    
-                    Divider()
-                    
-                    // List all widgets
-                    Section {
-                        if allWidgets.isEmpty {
-                            Text("No widgets in database")
-                                .foregroundColor(.secondary)
-                        } else {
-                            ForEach(allWidgets) { widget in
-                                HStack {
-                                    Image(systemName: widget.type.icon)
-                                        .foregroundColor(widget.isEnabled ? .green : .secondary)
-                                    Text(widget.type.displayName)
-                                    Spacer()
-                                    Text(widget.isEnabled ? "ON" : "OFF")
-                                        .foregroundColor(widget.isEnabled ? .green : .red)
-                                }
-                                .padding(.vertical, 4)
-                            }
-                        }
-                    } header: {
-                        Text("All Widgets")
-                            .font(.headline)
-                    }
-                    
-                    Divider()
-                    
-                    // CloudKit status
-                    Section {
-                        Button("Check CloudKit Status") {
-                            checkCloudKitStatus()
-                        }
-                        .buttonStyle(.bordered)
-                        
-                        Text(syncStatus)
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    } header: {
-                        Text("CloudKit")
-                            .font(.headline)
+            List {
+                Section("Widget Status") {
+                    LabeledContent("Total Widgets", value: "\(allWidgets.count)")
+                    LabeledContent("Enabled", value: "\(enabledWidgets.count)")
+                    LabeledContent("Disabled", value: "\(allWidgets.count - enabledWidgets.count)")
+                }
+                
+                Section("CloudKit Status") {
+                    LabeledContent("Last Sync", value: lastRefresh.formatted(date: .numeric, time: .shortened))
+                    if !syncStatus.isEmpty {
+                        LabeledContent("Status", value: syncStatus)
                     }
                 }
-                .padding(40)
+                
+                Section("Shuffle Status") {
+                    LabeledContent("Auto-Shuffle", value: "Every 5 seconds")
+                    LabeledContent("Current Order", value: "\(shuffledWidgets.count) widgets")
+                }
+                
+                if !allWidgets.isEmpty {
+                    Section("All Widgets") {
+                        ForEach(allWidgets) { widget in
+                            HStack {
+                                Image(systemName: widget.type.icon)
+                                    .foregroundColor(widget.isEnabled ? .green : .gray)
+                                
+                                VStack(alignment: .leading) {
+                                    Text(widget.type.displayName)
+                                        .font(.headline)
+                                    Text("Position: \(widget.position)")
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                }
+                                
+                                Spacer()
+                                
+                                Text(widget.isEnabled ? "Enabled" : "Disabled")
+                                    .font(.caption)
+                                    .foregroundColor(widget.isEnabled ? .green : .gray)
+                            }
+                        }
+                    }
+                }
             }
-            .background(colorScheme == .dark ? Color.black : Color.white)
-            .navigationTitle("Debug Info")
+            .navigationTitle("Dashboard Diagnostics")
             .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
+                ToolbarItem(placement: .navigationBarTrailing) {
                     Button("Done") {
                         showingDebugInfo = false
                     }
@@ -313,87 +340,99 @@ struct TVDashboardView: View {
         guard !isSyncing else { return }
         
         isSyncing = true
-        syncStatus = "Checking iCloud..."
-        print("📺 Starting sync check...")
+        syncStatus = "Syncing..."
         
-        let container = CKContainer.default()
-        
-        // Check account status
-        container.accountStatus { status, error in
-            DispatchQueue.main.async {
-                if let error = error {
-                    self.syncStatus = "❌ Account error: \(error.localizedDescription)"
-                    self.isSyncing = false
-                    return
+        Task {
+            do {
+                let container = CKContainer(identifier: "iCloud.com.rhlee.bragboard")
+                let database = container.privateCloudDatabase
+                
+                syncStatus = "Checking iCloud..."
+                
+                // Simple query to trigger sync
+                let query = CKQuery(recordType: "CD_Widget", predicate: NSPredicate(value: true))
+                let results = try await database.records(matching: query)
+                
+                syncStatus = "Found \(results.matchResults.count) record(s)"
+                
+                // Give SwiftData time to process
+                try await Task.sleep(for: .seconds(2))
+                
+                await MainActor.run {
+                    lastRefresh = Date()
+                    isSyncing = false
+                    
+                    // ✨ Clear sync status after successful sync
+                    if !allWidgets.isEmpty {
+                        // If we have widgets, clear the status
+                        syncStatus = ""
+                    } else {
+                        // If still no widgets, show helpful message
+                        syncStatus = results.matchResults.isEmpty ? "No widgets found - add from iPhone" : "Synced ✓"
+                    }
+                    
+                    // Refresh shuffled widgets after sync
+                    shuffleWidgetPositions()
+                    
+                    // ✨ Auto-clear success message after 3 seconds
+                    if !syncStatus.isEmpty && !syncStatus.contains("No widgets") {
+                        Task {
+                            try? await Task.sleep(for: .seconds(3))
+                            await MainActor.run {
+                                syncStatus = ""
+                            }
+                        }
+                    }
                 }
                 
-                switch status {
-                case .available:
-                    self.syncStatus = "✅ iCloud connected"
-                    self.refreshContext()
-                case .noAccount:
-                    self.syncStatus = "❌ No iCloud account - sign in on this device"
-                case .restricted:
-                    self.syncStatus = "⚠️ iCloud restricted"
-                case .couldNotDetermine:
-                    self.syncStatus = "⚠️ Could not check iCloud"
-                case .temporarilyUnavailable:
-                    self.syncStatus = "⚠️ iCloud temporarily unavailable"
-                @unknown default:
-                    self.syncStatus = "❓ Unknown iCloud status"
+                print("✅ CloudKit sync completed - \(results.matchResults.count) records found")
+            } catch {
+                await MainActor.run {
+                    isSyncing = false
+                    
+                    // ✨ Only show error if we have no widgets
+                    if allWidgets.isEmpty {
+                        syncStatus = "Sync failed - retrying..."
+                        print("❌ CloudKit sync error: \(error)")
+                        
+                        // Auto-retry after 3 seconds
+                        Task {
+                            try? await Task.sleep(for: .seconds(3))
+                            await MainActor.run {
+                                performCloudKitSync()
+                            }
+                        }
+                    } else {
+                        // If we already have widgets, silently ignore sync errors
+                        syncStatus = ""
+                        print("⚠️ CloudKit sync error (ignored - widgets already loaded): \(error)")
+                    }
                 }
-                
-                self.lastRefresh = Date()
-                self.isSyncing = false
             }
         }
     }
-    
-    private func refreshContext() {
-        // SwiftData handles CloudKit sync automatically
-        // We just log the current state for debugging
-        print("📺 Current SwiftData state:")
-        print("📺   Total widgets: \(allWidgets.count)")
-        print("📺   Enabled widgets: \(enabledWidgets.count)")
-        
-        for widget in allWidgets {
-            print("📺   - \(widget.type.displayName): enabled=\(widget.isEnabled)")
-        }
-        
-        if allWidgets.isEmpty {
-            syncStatus = "✅ iCloud connected - waiting for data (add widgets from iPhone)"
-        } else {
-            syncStatus = "✅ Synced: \(allWidgets.count) widget(s), \(enabledWidgets.count) enabled"
-        }
-    }
-    
-    private func checkCloudKitStatus() {
-        syncStatus = "Checking CloudKit..."
-        
-        let container = CKContainer.default()
-        container.accountStatus { status, error in
-            DispatchQueue.main.async {
-                if let error = error {
-                    self.syncStatus = "❌ Error: \(error.localizedDescription)"
-                    return
-                }
-                
-                switch status {
-                case .available:
-                    self.syncStatus = "✅ iCloud: Available | Container: \(container.containerIdentifier ?? "none")"
-                case .noAccount:
-                    self.syncStatus = "❌ No iCloud account signed in"
-                case .restricted:
-                    self.syncStatus = "⚠️ iCloud restricted"
-                case .couldNotDetermine:
-                    self.syncStatus = "⚠️ Could not determine iCloud status"
-                case .temporarilyUnavailable:
-                    self.syncStatus = "⚠️ iCloud temporarily unavailable"
-                @unknown default:
-                    self.syncStatus = "❓ Unknown status"
-                }
-            }
-        }
+}
+
+// MARK: - Widget Factory (TV-specific)
+@ViewBuilder
+private func TVCreateWidgetView(for widget: Widget) -> some View {
+    switch widget.type {
+    case .companyLogo:
+        TVLogoWidgetView(widget: widget)
+    case .customerCount:
+        TVCustomerCounterWidgetView(widget: widget)
+    case .instagramFollowers:
+        TVInstagramFollowersWidgetView(widget: widget)
+    case .locationsMap:
+        TVLocationMapWidgetView(widget: widget)
+    case .yearsInBusiness:
+        TVYearsInBusinessWidgetView(widget: widget)
+    case .daysSinceIncident:
+        TVDaysSinceIncidentWidgetView(widget: widget)
+    case .hiringBadge:
+        TVHiringBadgeWidgetView(widget: widget)
+    default:
+        TVPlaceholderWidgetView(widget: widget)
     }
 }
 
@@ -421,33 +460,6 @@ private struct TVWidgetContainer<Content: View>: View {
                 x: 0,
                 y: 5
             )
-    }
-}
-
-// MARK: - Widget Factory
-@ViewBuilder
-private func TVCreateWidgetView(for widget: Widget) -> some View {
-    switch widget.type {
-    case .companyLogo:
-        TVLogoWidgetView(widget: widget)
-        
-    case .customerCount:
-        TVCustomerCounterWidgetView(widget: widget)
-        
-    case .instagramFollowers:
-        TVInstagramFollowersWidgetView(widget: widget)
-        
-    case .locationsMap:
-        TVLocationMapWidgetView(widget: widget)
-        
-    case .yearsInBusiness:
-        TVYearsInBusinessWidgetView(widget: widget)
-        
-    case .daysSinceIncident:
-        TVDaysSinceIncidentWidgetView(widget: widget)
-        
-    default:
-        TVPlaceholderWidgetView(widget: widget)
     }
 }
 
@@ -802,6 +814,78 @@ private struct TVDaysSinceIncidentWidgetView: View {
                 colors: [
                     Color.green.opacity(colorScheme == .dark ? 0.3 : 0.15),
                     Color.mint.opacity(colorScheme == .dark ? 0.3 : 0.15)
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        }
+    }
+}
+
+// MARK: - ✨ NEW: We're Hiring Badge Widget
+private struct TVHiringBadgeWidgetView: View {
+    let widget: Widget
+    @Environment(\.colorScheme) private var colorScheme
+    @State private var animationPhase = 0.0
+    
+    var body: some View {
+        VStack(spacing: 20) {
+            Spacer()
+            
+            // Animated icon
+            ZStack {
+                Circle()
+                    .fill(Color.green.opacity(colorScheme == .dark ? 0.3 : 0.2))
+                    .frame(width: 100, height: 100)
+                    .scaleEffect(1 + sin(animationPhase) * 0.1)
+                
+                Image(systemName: "person.badge.plus.fill")
+                    .font(.system(size: 50))
+                    .foregroundColor(.green)
+            }
+            .onAppear {
+                withAnimation(.easeInOut(duration: 2).repeatForever(autoreverses: true)) {
+                    animationPhase = .pi * 2
+                }
+            }
+            
+            // Main message
+            Text("WE'RE HIRING!")
+                .font(.system(size: 48, weight: .bold, design: .rounded))
+                .foregroundColor(.primary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.5)
+            
+            // Subtitle
+            Text("Join Our Team")
+                .font(.title2)
+                .foregroundColor(.secondary)
+                .lineLimit(1)
+            
+            Spacer()
+            
+            // Badge
+            HStack(spacing: 8) {
+                Image(systemName: "sparkles")
+                    .font(.caption)
+                Text("Now Accepting Applications")
+                    .font(.caption)
+                Image(systemName: "sparkles")
+                    .font(.caption)
+            }
+            .foregroundColor(.green)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 8)
+            .background(Color.green.opacity(0.2))
+            .cornerRadius(20)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(24)
+        .background {
+            LinearGradient(
+                colors: [
+                    Color.green.opacity(colorScheme == .dark ? 0.25 : 0.12),
+                    Color.blue.opacity(colorScheme == .dark ? 0.25 : 0.12)
                 ],
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
