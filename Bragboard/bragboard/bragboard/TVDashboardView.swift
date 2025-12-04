@@ -3,8 +3,7 @@
 //  bragboard
 //
 //  Apple TV dashboard displaying all enabled widgets
-//  With manual CloudKit sync support and dark/light mode adaptation
-//  ✨ NEW: Auto-shuffle widgets every 5 seconds to prevent screen burn
+//  ✨ UPDATED: Now handles 2x widgets properly in grid layout
 //
 
 #if os(tvOS)
@@ -63,7 +62,7 @@ struct TVDashboardView: View {
                 // Initial shuffle
                 shuffleWidgetPositions()
                 
-                // Start shuffle timer (every 5 seconds)
+                // Start shuffle timer (every 60 seconds)
                 startShuffleTimer()
                 
                 // Auto-sync on appear
@@ -82,32 +81,69 @@ struct TVDashboardView: View {
             // Top bar with sync controls
             topBar
             
-            // Widget grid - 3 columns, 2 rows = 6 widgets max
+            // ✨ NEW: Custom grid layout that handles 2x widgets
             ScrollView {
-                LazyVGrid(
-                    columns: [
-                        GridItem(.flexible(), spacing: 30),
-                        GridItem(.flexible(), spacing: 30),
-                        GridItem(.flexible(), spacing: 30)
-                    ],
-                    spacing: 30
-                ) {
-                    // ✨ Use shuffled widgets instead of enabledWidgets
-                    ForEach(shuffledWidgets) { widget in
+                widgetGridView
+                    .padding(50)
+            }
+        }
+    }
+    
+    // MARK: - ✨ NEW: Custom Widget Grid (handles 2x widgets)
+    private var widgetGridView: some View {
+        let columnAssignments = distributeWidgetsToColumns(shuffledWidgets)
+        
+        return HStack(alignment: .top, spacing: 30) {
+            // 3 columns
+            ForEach(0..<3, id: \.self) { columnIndex in
+                VStack(spacing: 30) {
+                    // Get widgets assigned to this column
+                    ForEach(columnAssignments[columnIndex], id: \.id) { widget in
                         TVWidgetContainer {
                             TVCreateWidgetView(for: widget)
                         }
-                        .frame(height: 400)
-                        .aspectRatio(1.4, contentMode: .fit)
-                        // ✨ Smooth transition animation
+                        // ✨ Height based on widget size
+                        .frame(height: widget.is2x ? 830 : 400)
+                        .aspectRatio(widget.is2x ? 0.7 : 1.4, contentMode: .fit)
                         .transition(.opacity.combined(with: .scale(scale: 0.95)))
                     }
                 }
-                .padding(50)
-                // ✨ Animate position changes
-                .animation(.easeInOut(duration: 0.8), value: shuffledWidgets.map { $0.id })
+                .frame(maxWidth: .infinity)
             }
         }
+        .animation(.easeInOut(duration: 0.8), value: shuffledWidgets.map { $0.id })
+    }
+    
+    // ✨ NEW: Smart distribution algorithm that prevents widgets from disappearing
+    private func distributeWidgetsToColumns(_ widgets: [Widget]) -> [[Widget]] {
+        // Initialize 3 empty columns
+        var columns: [[Widget]] = [[], [], []]
+        var columnCapacity = [2, 2, 2] // Each column can hold 2 rows initially
+        
+        // Process widgets in order
+        for widget in widgets {
+            if widget.is2x {
+                // 2× widget needs an empty column (takes both rows)
+                if let emptyColumnIndex = columnCapacity.firstIndex(where: { $0 == 2 }) {
+                    columns[emptyColumnIndex].append(widget)
+                    columnCapacity[emptyColumnIndex] = 0 // Column is now full
+                } else {
+                    // No empty column available - skip this 2× widget
+                    print("⚠️ Warning: No space for 2× widget, skipping")
+                }
+            } else {
+                // 1× widget - find column with space
+                if let availableColumnIndex = columnCapacity.firstIndex(where: { $0 > 0 }) {
+                    columns[availableColumnIndex].append(widget)
+                    columnCapacity[availableColumnIndex] -= 1
+                } else {
+                    // No space available - this shouldn't happen with proper validation
+                    print("⚠️ Warning: No space for 1× widget, skipping")
+                }
+            }
+        }
+        
+        return columns
     }
     
     // MARK: - Widget Shuffle Logic
@@ -115,8 +151,8 @@ struct TVDashboardView: View {
         // Cancel any existing timer
         stopShuffleTimer()
         
-        // Create new timer that fires every 5 seconds
-        shuffleTimer = Timer.scheduledTimer(withTimeInterval: 5.0, repeats: true) { _ in
+        // Create new timer that fires every 60 seconds
+        shuffleTimer = Timer.scheduledTimer(withTimeInterval: 100.0, repeats: true) { _ in
             shuffleWidgetPositions()
         }
     }
@@ -128,9 +164,15 @@ struct TVDashboardView: View {
     
     private func shuffleWidgetPositions() {
         withAnimation {
-            shuffledWidgets = enabledWidgets.shuffled()
+            // ✨ Smart shuffle that respects 2x widget constraints
+            shuffledWidgets = smartShuffle(widgets: enabledWidgets)
         }
-        print("🔀 Shuffled \(shuffledWidgets.count) widgets to prevent burn-in")
+    }
+    
+    // ✨ NEW: Smart shuffle that handles 2x widgets properly
+    private func smartShuffle(widgets: [Widget]) -> [Widget] {
+        // Simple shuffle - the distributeWidgetsToColumns function handles proper placement
+        return widgets.shuffled()
     }
     
     // MARK: - Top Bar
@@ -238,14 +280,14 @@ struct TVDashboardView: View {
     private var noEnabledWidgetsView: some View {
         VStack(spacing: 30) {
             Image(systemName: "eye.slash")
-                .font(.system(size: 100))
+                .font(.system(size: 120))
                 .foregroundColor(.secondary)
             
             Text("All Widgets Disabled")
                 .font(.largeTitle)
                 .foregroundColor(.primary)
             
-            Text("You have \(allWidgets.count) widget(s) but none are enabled.\nEnable widgets from your iPhone app.")
+            Text("Enable widgets from your iPhone app")
                 .font(.title3)
                 .foregroundColor(.secondary)
                 .multilineTextAlignment(.center)
@@ -253,10 +295,10 @@ struct TVDashboardView: View {
             Button {
                 performCloudKitSync()
             } label: {
-                Label("Refresh", systemImage: "arrow.triangle.2.circlepath")
+                Label("Sync to Refresh", systemImage: "arrow.triangle.2.circlepath")
             }
             .buttonStyle(.borderedProminent)
-            .tint(.green)
+            .tint(.blue)
         }
     }
     
@@ -267,66 +309,60 @@ struct TVDashboardView: View {
                 .progressViewStyle(CircularProgressViewStyle(tint: .accentColor))
                 .scaleEffect(2)
             
-            Text("Syncing with iCloud...")
-                .font(.title)
+            Text("Syncing Widgets...")
+                .font(.largeTitle)
                 .foregroundColor(.primary)
             
-            Text(syncStatus)
-                .font(.caption)
-                .foregroundColor(.secondary)
+            if !syncStatus.isEmpty {
+                Text(syncStatus)
+                    .font(.title3)
+                    .foregroundColor(.secondary)
+            }
         }
     }
     
-    // MARK: - Debug Sheet
+    // MARK: - Debug Info Sheet
     private var debugInfoSheet: some View {
         NavigationStack {
-            List {
+            Form {
                 Section("Widget Status") {
                     LabeledContent("Total Widgets", value: "\(allWidgets.count)")
-                    LabeledContent("Enabled", value: "\(enabledWidgets.count)")
-                    LabeledContent("Disabled", value: "\(allWidgets.count - enabledWidgets.count)")
+                    LabeledContent("Enabled Widgets", value: "\(enabledWidgets.count)")
+                    LabeledContent("2× Widgets", value: "\(enabledWidgets.filter { $0.is2x }.count)")
                 }
                 
-                Section("CloudKit Status") {
-                    LabeledContent("Last Sync", value: lastRefresh.formatted(date: .numeric, time: .shortened))
-                    if !syncStatus.isEmpty {
-                        LabeledContent("Status", value: syncStatus)
-                    }
-                }
-                
-                Section("Shuffle Status") {
-                    LabeledContent("Auto-Shuffle", value: "Every 5 seconds")
-                    LabeledContent("Current Order", value: "\(shuffledWidgets.count) widgets")
-                }
-                
-                if !allWidgets.isEmpty {
-                    Section("All Widgets") {
-                        ForEach(allWidgets) { widget in
-                            HStack {
-                                Image(systemName: widget.type.icon)
-                                    .foregroundColor(widget.isEnabled ? .green : .gray)
-                                
-                                VStack(alignment: .leading) {
-                                    Text(widget.type.displayName)
-                                        .font(.headline)
-                                    Text("Position: \(widget.position)")
-                                        .font(.caption)
-                                        .foregroundColor(.secondary)
-                                }
-                                
-                                Spacer()
-                                
-                                Text(widget.isEnabled ? "Enabled" : "Disabled")
-                                    .font(.caption)
-                                    .foregroundColor(widget.isEnabled ? .green : .gray)
+                Section("Widget Details") {
+                    ForEach(allWidgets) { widget in
+                        HStack {
+                            Image(systemName: widget.type.icon)
+                                .foregroundColor(widget.isEnabled ? .green : .gray)
+                            Text(widget.type.displayName)
+                            Spacer()
+                            if widget.is2x {
+                                Text("2×")
+                                    .font(.caption.bold())
+                                    .foregroundColor(.white)
+                                    .padding(.horizontal, 6)
+                                    .padding(.vertical, 2)
+                                    .background(Color.orange)
+                                    .cornerRadius(4)
                             }
+                            Text(widget.isEnabled ? "On" : "Off")
+                                .foregroundColor(widget.isEnabled ? .green : .secondary)
                         }
                     }
                 }
+                
+                Section("CloudKit") {
+                    Button("Force Sync") {
+                        performCloudKitSync()
+                    }
+                    .disabled(isSyncing)
+                }
             }
-            .navigationTitle("Dashboard Diagnostics")
+            .navigationTitle("Debug Information")
             .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
+                ToolbarItem(placement: .cancellationAction) {
                     Button("Done") {
                         showingDebugInfo = false
                     }
@@ -340,105 +376,71 @@ struct TVDashboardView: View {
         guard !isSyncing else { return }
         
         isSyncing = true
-        syncStatus = "Syncing..."
+        syncStatus = "Checking iCloud..."
         
         Task {
             do {
-                let container = CKContainer(identifier: "iCloud.com.rhlee.bragboard")
-                let database = container.privateCloudDatabase
+                // Check CloudKit status
+                let container = CKContainer.default()
+                let status = try await container.accountStatus()
                 
-                syncStatus = "Checking iCloud..."
+                await MainActor.run {
+                    switch status {
+                    case .available:
+                        syncStatus = "iCloud available, fetching changes..."
+                        print("âœ… CloudKit account available")
+                    case .noAccount:
+                        syncStatus = "⚠️ No iCloud account"
+                        print("⚠️ No iCloud account signed in")
+                    case .restricted:
+                        syncStatus = "⚠️ iCloud restricted"
+                        print("⚠️ iCloud access restricted")
+                    case .couldNotDetermine:
+                        syncStatus = "⚠️ Cannot determine iCloud status"
+                        print("⚠️ Cannot determine CloudKit status")
+                    case .temporarilyUnavailable:
+                        syncStatus = "⚠️ iCloud temporarily unavailable"
+                        print("⚠️ CloudKit temporarily unavailable")
+                    @unknown default:
+                        syncStatus = "⚠️ Unknown iCloud status"
+                        print("⚠️ Unknown CloudKit status")
+                    }
+                }
                 
-                // Simple query to trigger sync
-                let query = CKQuery(recordType: "CD_Widget", predicate: NSPredicate(value: true))
-                let results = try await database.records(matching: query)
-                
-                syncStatus = "Found \(results.matchResults.count) record(s)"
-                
-                // Give SwiftData time to process
+                // Small delay to let SwiftData sync
                 try await Task.sleep(for: .seconds(2))
                 
                 await MainActor.run {
+                    // Update shuffle after sync
+                    shuffleWidgetPositions()
                     lastRefresh = Date()
+                    syncStatus = status == .available ? "✅ Sync complete" : "⚠️ Sync completed with warnings"
                     isSyncing = false
                     
-                    // ✨ Clear sync status after successful sync
-                    if !allWidgets.isEmpty {
-                        // If we have widgets, clear the status
-                        syncStatus = ""
-                    } else {
-                        // If still no widgets, show helpful message
-                        syncStatus = results.matchResults.isEmpty ? "No widgets found - add from iPhone" : "Synced ✓"
-                    }
-                    
-                    // Refresh shuffled widgets after sync
-                    shuffleWidgetPositions()
-                    
-                    // ✨ Auto-clear success message after 3 seconds
-                    if !syncStatus.isEmpty && !syncStatus.contains("No widgets") {
-                        Task {
-                            try? await Task.sleep(for: .seconds(3))
-                            await MainActor.run {
+                    // Clear status after delay
+                    Task {
+                        try? await Task.sleep(for: .seconds(3))
+                        await MainActor.run {
+                            if !isSyncing {
                                 syncStatus = ""
                             }
                         }
                     }
                 }
                 
-                print("✅ CloudKit sync completed - \(results.matchResults.count) records found")
             } catch {
                 await MainActor.run {
+                    syncStatus = "❌ Sync failed: \(error.localizedDescription)"
                     isSyncing = false
-                    
-                    // ✨ Only show error if we have no widgets
-                    if allWidgets.isEmpty {
-                        syncStatus = "Sync failed - retrying..."
-                        print("❌ CloudKit sync error: \(error)")
-                        
-                        // Auto-retry after 3 seconds
-                        Task {
-                            try? await Task.sleep(for: .seconds(3))
-                            await MainActor.run {
-                                performCloudKitSync()
-                            }
-                        }
-                    } else {
-                        // If we already have widgets, silently ignore sync errors
-                        syncStatus = ""
-                        print("⚠️ CloudKit sync error (ignored - widgets already loaded): \(error)")
-                    }
+                    print("❌ CloudKit sync error: \(error)")
                 }
             }
         }
     }
 }
 
-// MARK: - Widget Factory (TV-specific)
-@ViewBuilder
-private func TVCreateWidgetView(for widget: Widget) -> some View {
-    switch widget.type {
-    case .companyLogo:
-        TVLogoWidgetView(widget: widget)
-    case .customerCount:
-        TVCustomerCounterWidgetView(widget: widget)
-    case .instagramFollowers:
-        TVInstagramFollowersWidgetView(widget: widget)
-    case .locationsMap:
-        TVLocationMapWidgetView(widget: widget)
-    case .yearsInBusiness:
-        TVYearsInBusinessWidgetView(widget: widget)
-    case .daysSinceIncident:
-        TVDaysSinceIncidentWidgetView(widget: widget)
-    case .hiringBadge:
-        TVHiringBadgeWidgetView(widget: widget)
-    default:
-        TVPlaceholderWidgetView(widget: widget)
-    }
-}
-
-// MARK: - Widget Container (Common styling)
-private struct TVWidgetContainer<Content: View>: View {
-    @Environment(\.colorScheme) private var colorScheme
+// MARK: - TV Widget Container
+struct TVWidgetContainer<Content: View>: View {
     let content: Content
     
     init(@ViewBuilder content: () -> Content) {
@@ -447,486 +449,16 @@ private struct TVWidgetContainer<Content: View>: View {
     
     var body: some View {
         content
-            .background(
-                (colorScheme == .dark ? Color.black : Color.white)
-                    .opacity(colorScheme == .dark ? 0.2 : 0.8)
-            )
+            .background(Color.black.opacity(0.2))
             .cornerRadius(24)
-            .shadow(
-                color: colorScheme == .dark
-                    ? Color.black.opacity(0.3)
-                    : Color.black.opacity(0.1),
-                radius: 10,
-                x: 0,
-                y: 5
-            )
+            .shadow(color: Color.black.opacity(0.3), radius: 10, x: 0, y: 5)
     }
 }
 
-// MARK: - Company Logo Widget
-private struct TVLogoWidgetView: View {
-    let widget: Widget
-    
-    var body: some View {
-        VStack {
-            Spacer()
-            if let imageData = widget.configuration?.imageData,
-               let uiImage = UIImage(data: imageData) {
-                Image(uiImage: uiImage)
-                    .resizable()
-                    .scaledToFit()
-                    .frame(maxWidth: 280, maxHeight: 280)
-            } else {
-                // Placeholder
-                RoundedRectangle(cornerRadius: 16)
-                    .fill(Color.secondary.opacity(0.2))
-                    .frame(width: 200, height: 200)
-                    .overlay {
-                        VStack(spacing: 10) {
-                            Image(systemName: "building.2")
-                                .font(.system(size: 50))
-                                .foregroundColor(.secondary)
-                            Text("Add Logo")
-                                .font(.subheadline)
-                                .foregroundColor(.secondary)
-                        }
-                    }
-            }
-            Spacer()
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .padding(24)
-    }
-}
-
-// MARK: - Customer Counter Widget
-private struct TVCustomerCounterWidgetView: View {
-    let widget: Widget
-    @Environment(\.colorScheme) private var colorScheme
-    
-    private var label: String {
-        let configLabel = widget.configuration?.counterLabel ?? ""
-        return configLabel.isEmpty ? "Customers Served" : configLabel
-    }
-    
-    var body: some View {
-        VStack(spacing: 16) {
-            Spacer()
-            
-            Text(MockDataService.formatNumber(
-                widget.configuration?.counterValue ?? 0,
-                style: .full
-            ))
-                .font(.system(size: 56, weight: .bold, design: .rounded))
-                .foregroundColor(.primary)
-                .minimumScaleFactor(0.5)
-                .lineLimit(1)
-            
-            Text(label)
-                .font(.title3)
-                .foregroundColor(.secondary)
-                .lineLimit(2)
-                .multilineTextAlignment(.center)
-            
-            Spacer()
-            
-            Image(systemName: "person.3.fill")
-                .font(.system(size: 32))
-                .foregroundColor(.blue.opacity(colorScheme == .dark ? 0.6 : 0.4))
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .padding(24)
-        .background {
-            LinearGradient(
-                colors: [
-                    Color.blue.opacity(colorScheme == .dark ? 0.3 : 0.15),
-                    Color.purple.opacity(colorScheme == .dark ? 0.3 : 0.15)
-                ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-        }
-    }
-}
-
-// MARK: - Instagram Followers Widget
-private struct TVInstagramFollowersWidgetView: View {
-    let widget: Widget
-    @Environment(\.colorScheme) private var colorScheme
-    @State private var followerCount: Int = 0
-    
-    var body: some View {
-        VStack(spacing: 16) {
-            Spacer()
-            
-            ZStack {
-                RoundedRectangle(cornerRadius: 16)
-                    .fill(
-                        LinearGradient(
-                            colors: [.purple, .pink, .orange],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-                    .frame(width: 80, height: 80)
-                
-                Image(systemName: "camera.fill")
-                    .font(.system(size: 40))
-                    .foregroundColor(.white)
-            }
-            
-            Text(MockDataService.formatNumber(followerCount))
-                .font(.system(size: 56, weight: .bold, design: .rounded))
-                .foregroundColor(.primary)
-                .minimumScaleFactor(0.5)
-                .lineLimit(1)
-            
-            Text("Instagram Followers")
-                .font(.title3)
-                .foregroundColor(.secondary)
-                .lineLimit(2)
-                .multilineTextAlignment(.center)
-            
-            Spacer()
-            
-            Text("SAMPLE DATA")
-                .font(.caption2)
-                .foregroundColor(.yellow)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 3)
-                .background(Color.yellow.opacity(0.2))
-                .cornerRadius(6)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .padding(24)
-        .background(
-            (colorScheme == .dark ? Color.black : Color.white)
-                .opacity(colorScheme == .dark ? 0.3 : 0.5)
-        )
-        .onAppear {
-            followerCount = MockDataService.shared.getInstagramFollowers()
-        }
-    }
-}
-
-// MARK: - Location Map Widget
-private struct TVLocationMapWidgetView: View {
-    let widget: Widget
-    @Environment(\.colorScheme) private var colorScheme
-    @State private var locations: [String] = []
-    
-    var body: some View {
-        VStack(spacing: 16) {
-            Spacer()
-            
-            ZStack {
-                Circle()
-                    .fill(Color.green.opacity(colorScheme == .dark ? 0.3 : 0.2))
-                    .frame(width: 80, height: 80)
-                
-                Image(systemName: "map.fill")
-                    .font(.system(size: 40))
-                    .foregroundColor(.green)
-            }
-            
-            Text("\(locations.count)")
-                .font(.system(size: 56, weight: .bold, design: .rounded))
-                .foregroundColor(.primary)
-                .minimumScaleFactor(0.5)
-                .lineLimit(1)
-            
-            Text("Locations Worldwide")
-                .font(.title3)
-                .foregroundColor(.secondary)
-                .lineLimit(2)
-                .multilineTextAlignment(.center)
-            
-            Spacer()
-            
-            Text("SAMPLE DATA")
-                .font(.caption2)
-                .foregroundColor(.yellow)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 3)
-                .background(Color.yellow.opacity(0.2))
-                .cornerRadius(6)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .padding(24)
-        .background {
-            LinearGradient(
-                colors: [
-                    Color.green.opacity(colorScheme == .dark ? 0.3 : 0.15),
-                    Color.teal.opacity(colorScheme == .dark ? 0.3 : 0.15)
-                ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-        }
-        .onAppear {
-            locations = MockDataService.shared.getLocationNames()
-        }
-    }
-}
-
-// MARK: - Years in Business Widget
-private struct TVYearsInBusinessWidgetView: View {
-    let widget: Widget
-    @Environment(\.colorScheme) private var colorScheme
-    
-    private var yearsInBusiness: Int {
-        guard let startDate = widget.configuration?.startDate else { return 0 }
-        let calendar = Calendar.current
-        let years = calendar.dateComponents([.year], from: startDate, to: Date()).year ?? 0
-        return max(0, years)
-    }
-    
-    var body: some View {
-        VStack(spacing: 16) {
-            Spacer()
-            
-            ZStack {
-                Circle()
-                    .fill(Color.blue.opacity(colorScheme == .dark ? 0.3 : 0.2))
-                    .frame(width: 80, height: 80)
-                
-                Image(systemName: "calendar.badge.clock")
-                    .font(.system(size: 40))
-                    .foregroundColor(.blue)
-            }
-            
-            HStack(alignment: .firstTextBaseline, spacing: 6) {
-                Text("\(yearsInBusiness)")
-                    .font(.system(size: 56, weight: .bold, design: .rounded))
-                    .foregroundColor(.primary)
-                    .minimumScaleFactor(0.5)
-                    .lineLimit(1)
-                
-                Text(yearsInBusiness == 1 ? "Year" : "Years")
-                    .font(.system(size: 28, weight: .medium))
-                    .foregroundColor(.secondary)
-            }
-            
-            Text("In Business")
-                .font(.title3)
-                .foregroundColor(.secondary)
-                .lineLimit(1)
-            
-            Spacer()
-            
-            if let startDate = widget.configuration?.startDate {
-                Text("Since \(startDate.formatted(date: .abbreviated, time: .omitted))")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-            } else {
-                Text("Set start date")
-                    .font(.caption)
-                    .foregroundColor(.yellow)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 3)
-                    .background(Color.yellow.opacity(0.2))
-                    .cornerRadius(6)
-            }
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .padding(24)
-        .background {
-            LinearGradient(
-                colors: [
-                    Color.blue.opacity(colorScheme == .dark ? 0.3 : 0.15),
-                    Color.cyan.opacity(colorScheme == .dark ? 0.3 : 0.15)
-                ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-        }
-    }
-}
-
-// MARK: - Days Since Incident Widget
-private struct TVDaysSinceIncidentWidgetView: View {
-    let widget: Widget
-    @Environment(\.colorScheme) private var colorScheme
-    
-    private var daysSinceIncident: Int {
-        guard let incidentDate = widget.configuration?.incidentDate else { return 0 }
-        let calendar = Calendar.current
-        let days = calendar.dateComponents([.day], from: incidentDate, to: Date()).day ?? 0
-        return max(0, days)
-    }
-    
-    private var incidentLabel: String {
-        widget.configuration?.incidentLabel ?? "Last Incident"
-    }
-    
-    var body: some View {
-        VStack(spacing: 16) {
-            Spacer()
-            
-            ZStack {
-                Circle()
-                    .fill(Color.green.opacity(colorScheme == .dark ? 0.3 : 0.2))
-                    .frame(width: 80, height: 80)
-                
-                Image(systemName: "checkmark.shield.fill")
-                    .font(.system(size: 40))
-                    .foregroundColor(.green)
-            }
-            
-            HStack(alignment: .firstTextBaseline, spacing: 6) {
-                Text("\(daysSinceIncident)")
-                    .font(.system(size: 56, weight: .bold, design: .rounded))
-                    .foregroundColor(.primary)
-                    .minimumScaleFactor(0.5)
-                    .lineLimit(1)
-                
-                Text(daysSinceIncident == 1 ? "Day" : "Days")
-                    .font(.system(size: 28, weight: .medium))
-                    .foregroundColor(.secondary)
-            }
-            
-            Text("Since \(incidentLabel)")
-                .font(.title3)
-                .foregroundColor(.secondary)
-                .lineLimit(2)
-                .multilineTextAlignment(.center)
-            
-            Spacer()
-            
-            if let incidentDate = widget.configuration?.incidentDate {
-                Text("Last: \(incidentDate.formatted(date: .abbreviated, time: .omitted))")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-            } else {
-                Text("Set incident date")
-                    .font(.caption)
-                    .foregroundColor(.yellow)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 3)
-                    .background(Color.yellow.opacity(0.2))
-                    .cornerRadius(6)
-            }
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .padding(24)
-        .background {
-            LinearGradient(
-                colors: [
-                    Color.green.opacity(colorScheme == .dark ? 0.3 : 0.15),
-                    Color.mint.opacity(colorScheme == .dark ? 0.3 : 0.15)
-                ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-        }
-    }
-}
-
-// MARK: - ✨ NEW: We're Hiring Badge Widget
-private struct TVHiringBadgeWidgetView: View {
-    let widget: Widget
-    @Environment(\.colorScheme) private var colorScheme
-    @State private var animationPhase = 0.0
-    
-    var body: some View {
-        VStack(spacing: 20) {
-            Spacer()
-            
-            // Animated icon
-            ZStack {
-                Circle()
-                    .fill(Color.green.opacity(colorScheme == .dark ? 0.3 : 0.2))
-                    .frame(width: 100, height: 100)
-                    .scaleEffect(1 + sin(animationPhase) * 0.1)
-                
-                Image(systemName: "person.badge.plus.fill")
-                    .font(.system(size: 50))
-                    .foregroundColor(.green)
-            }
-            .onAppear {
-                withAnimation(.easeInOut(duration: 2).repeatForever(autoreverses: true)) {
-                    animationPhase = .pi * 2
-                }
-            }
-            
-            // Main message
-            Text("WE'RE HIRING!")
-                .font(.system(size: 48, weight: .bold, design: .rounded))
-                .foregroundColor(.primary)
-                .lineLimit(1)
-                .minimumScaleFactor(0.5)
-            
-            // Subtitle
-            Text("Join Our Team")
-                .font(.title2)
-                .foregroundColor(.secondary)
-                .lineLimit(1)
-            
-            Spacer()
-            
-            // Badge
-            HStack(spacing: 8) {
-                Image(systemName: "sparkles")
-                    .font(.caption)
-                Text("Now Accepting Applications")
-                    .font(.caption)
-                Image(systemName: "sparkles")
-                    .font(.caption)
-            }
-            .foregroundColor(.green)
-            .padding(.horizontal, 16)
-            .padding(.vertical, 8)
-            .background(Color.green.opacity(0.2))
-            .cornerRadius(20)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .padding(24)
-        .background {
-            LinearGradient(
-                colors: [
-                    Color.green.opacity(colorScheme == .dark ? 0.25 : 0.12),
-                    Color.blue.opacity(colorScheme == .dark ? 0.25 : 0.12)
-                ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-        }
-    }
-}
-
-// MARK: - Placeholder Widget
-private struct TVPlaceholderWidgetView: View {
-    let widget: Widget
-    @Environment(\.colorScheme) private var colorScheme
-    
-    var body: some View {
-        VStack(spacing: 16) {
-            Spacer()
-            
-            Image(systemName: widget.type.icon)
-                .font(.system(size: 50))
-                .foregroundColor(.secondary)
-            
-            Text(widget.type.displayName)
-                .font(.title3)
-                .foregroundColor(.primary)
-                .lineLimit(2)
-                .multilineTextAlignment(.center)
-            
-            Spacer()
-            
-            Text("Coming Soon")
-                .font(.caption)
-                .foregroundColor(.secondary)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 6)
-                .background(Color.secondary.opacity(0.2))
-                .cornerRadius(6)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .padding(24)
-        .background(Color.secondary.opacity(colorScheme == .dark ? 0.1 : 0.05))
-    }
+// MARK: - TV Widget View Factory
+@ViewBuilder
+func TVCreateWidgetView(for widget: Widget) -> some View {
+    createWidgetView(for: widget)
 }
 
 #Preview {

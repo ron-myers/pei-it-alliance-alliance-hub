@@ -3,7 +3,7 @@
 //  bragboard
 //
 //  Core data models for widget system
-//  ✨ UPDATED: hiringBadge now implemented
+//  ✨ UPDATED: Added Instagram manual input and improved Months & Days display
 //
 
 import Foundation
@@ -21,6 +21,10 @@ final class Widget {
     var isEnabled: Bool = true
     var position: Int = 0
     var lastUpdated: Date = Date()
+    
+    // 2x size support
+    var is2x: Bool = false
+    
     var configuration: WidgetConfiguration?
     
     // Computed property to work with WidgetType enum
@@ -29,11 +33,12 @@ final class Widget {
         set { typeRawValue = newValue.rawValue }
     }
     
-    init(id: UUID = UUID(), type: WidgetType = .companyLogo, isEnabled: Bool = true, position: Int = 0) {
+    init(id: UUID = UUID(), type: WidgetType = .companyLogo, isEnabled: Bool = true, position: Int = 0, is2x: Bool = false) {
         self.id = id
         self.typeRawValue = type.rawValue
         self.isEnabled = isEnabled
         self.position = position
+        self.is2x = is2x
         self.lastUpdated = Date()
     }
 }
@@ -56,6 +61,19 @@ final class WidgetConfiguration {
     var counterLabel: String = ""
     var startDate: Date?
     
+    // ✨ NEW: Time display format for Years in Business widget
+    var timeDisplayFormatRaw: String = "years"  // Store as String for CloudKit
+    
+    // ✨ NEW: Instagram manual input
+    var instagramUsername: String = ""
+    var instagramFollowerCount: Int = 0
+    
+    // Computed property for TimeDisplayFormat enum
+    var timeDisplayFormat: TimeDisplayFormat {
+        get { TimeDisplayFormat(rawValue: timeDisplayFormatRaw) ?? .years }
+        set { timeDisplayFormatRaw = newValue.rawValue }
+    }
+    
     // Incident tracking
     var incidentDate: Date?
     var incidentLabel: String = "Last Incident"
@@ -72,7 +90,41 @@ final class WidgetConfiguration {
     var locationNames: [String] = []
     var locationCount: Int = 0
     
+    // Room status display options
+    var showRoomNumber: Bool = false
+    var showFloor: Bool = false
+    var showCapacity: Bool = false
+    var showCurrentBooking: Bool = false
+    var showNextBooking: Bool = false
+    
     init() {}
+}
+
+// MARK: - Time Display Format Enum
+/// ✨ Format options for displaying time since business started
+enum TimeDisplayFormat: String, Codable, CaseIterable {
+    case years = "years"
+    case months = "months"
+    case days = "days"
+    case monthsAndDays = "monthsAndDays"
+    
+    var displayName: String {
+        switch self {
+        case .years: return "Years"
+        case .months: return "Months"
+        case .days: return "Days"
+        case .monthsAndDays: return "Months & Days"
+        }
+    }
+    
+    var unitLabel: String {
+        switch self {
+        case .years: return "In Business"
+        case .months: return "In Business"
+        case .days: return "In Business"
+        case .monthsAndDays: return "In Business"
+        }
+    }
 }
 
 // MARK: - Widget Type Enum
@@ -85,7 +137,7 @@ enum WidgetType: String, Codable, CaseIterable {
     // Stats/Counters - Manual Entry
     case customerCount = "customerCount"
     
-    // Social Media - Mock Data (API not ready)
+    // Social Media - Manual Entry (was Mock Data)
     case instagramFollowers = "instagramFollowers"
     
     // Geographic - Mock Data
@@ -95,8 +147,11 @@ enum WidgetType: String, Codable, CaseIterable {
     case yearsInBusiness = "yearsInBusiness"              // Auto-calculate from founding date
     case daysSinceIncident = "daysSinceIncident"          // Safety counter
     
-    // Team - ✨ NOW IMPLEMENTED
+    // Team
     case hiringBadge = "hiringBadge"                      // "We're Hiring!" badge
+    
+    // Operations
+    case roomStatus = "roomStatus"                        // Real-time room availability status
     
     // ========== TODO: FUTURE WIDGETS ==========
     
@@ -141,6 +196,7 @@ enum WidgetType: String, Codable, CaseIterable {
         case .yearsInBusiness: return "Years in Business"
         case .daysSinceIncident: return "Days Since Incident"
         case .hiringBadge: return "We're Hiring"
+        case .roomStatus: return "Room Status"
             
         // TODO
         case .youtubeSubscribers: return "YouTube Subscribers"
@@ -173,6 +229,7 @@ enum WidgetType: String, Codable, CaseIterable {
         case .yearsInBusiness: return "calendar"
         case .daysSinceIncident: return "checkmark.shield"
         case .hiringBadge: return "person.badge.plus"
+        case .roomStatus: return "door.left.hand.open"
             
         // TODO
         case .youtubeSubscribers: return "play.rectangle"
@@ -207,13 +264,24 @@ enum WidgetType: String, Codable, CaseIterable {
         case .testimonial, .tagline, .announcement: return .text
         case .locationsMap, .countriesServed: return .geographic
         case .teamSize, .hiringBadge: return .team
+        case .roomStatus: return .operations
         }
     }
     
     var isImplemented: Bool {
         switch self {
         case .companyLogo, .customerCount, .instagramFollowers, .locationsMap,
-             .yearsInBusiness, .daysSinceIncident, .hiringBadge:
+             .yearsInBusiness, .daysSinceIncident, .hiringBadge, .roomStatus:
+            return true
+        default:
+            return false
+        }
+    }
+    
+    // Can this widget type be expanded to 2x?
+    var supports2x: Bool {
+        switch self {
+        case .roomStatus:
             return true
         default:
             return false
@@ -232,5 +300,5 @@ enum WidgetCategory: String, CaseIterable {
     case text = "Text & Messages"
     case geographic = "Geographic"
     case team = "Team"
+    case operations = "Operations"
 }
-
