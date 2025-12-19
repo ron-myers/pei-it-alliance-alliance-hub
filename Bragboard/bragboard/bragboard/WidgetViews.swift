@@ -65,39 +65,36 @@ struct LogoWidgetView: View {
 // MARK: - Customer Counter Widget
 struct CustomerCounterWidgetView: View {
     let widget: Widget
-    
+
     private var label: String {
         let configLabel = widget.configuration?.counterLabel ?? ""
         return configLabel.isEmpty ? "Customers Served" : configLabel
     }
-    
+
     var body: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: 20) {
             Spacer()
-            
-            // Counter value
+                .frame(maxHeight: 20)
+
+            // Counter value (extra large size)
             Text(MockDataService.formatNumber(
                 widget.configuration?.counterValue ?? 0,
                 style: .full
             ))
-                .font(.system(size: 56, weight: .bold, design: .rounded))
+                .font(.system(size: 160, weight: .bold, design: .rounded))
                 .foregroundColor(.white)
                 .minimumScaleFactor(0.5)
                 .lineLimit(1)
-            
-            // Custom label
+
+            // Custom label (same size)
             Text(label)
                 .font(.title3)
                 .foregroundColor(.white.opacity(0.8))
                 .lineLimit(2)
                 .multilineTextAlignment(.center)
-            
+
             Spacer()
-            
-            // Decorative icon
-            Image(systemName: "person.3.fill")
-                .font(.system(size: 32))
-                .foregroundColor(.blue.opacity(0.6))
+                .frame(maxHeight: 20)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding(24)
@@ -242,99 +239,125 @@ struct YearsInBusinessWidgetView: View {
         guard let startDate = widget.configuration?.startDate else { return "0" }
         let calendar = Calendar.current
         let format = widget.configuration?.timeDisplayFormat ?? .years
-        
+
         switch format {
         case .years:
             let years = calendar.dateComponents([.year], from: startDate, to: Date()).year ?? 0
             return "\(max(0, years))"
-            
+
         case .months:
             let months = calendar.dateComponents([.month], from: startDate, to: Date()).month ?? 0
             return "\(max(0, months))"
-            
+
         case .days:
             let days = calendar.dateComponents([.day], from: startDate, to: Date()).day ?? 0
             return "\(max(0, days))"
-            
+
         case .monthsAndDays:
-            let components = calendar.dateComponents([.month, .day], from: startDate, to: Date())
-            let months = components.month ?? 0
-            let days = components.day ?? 0
-            let monthText = months == 1 ? "Month" : "Months"
-            let dayText = days == 1 ? "Day" : "Days"
-            return "\(max(0, months)) \(monthText) \(max(0, days)) \(dayText)"
+            return "" // Handled separately in the view
         }
     }
-    
+
     private var timeUnit: String {
         let format = widget.configuration?.timeDisplayFormat ?? .years
-        
+
         guard let startDate = widget.configuration?.startDate else {
             return format == .years ? "Years" : format == .months ? "Months" : format == .days ? "Days" : ""
         }
-        
+
         let calendar = Calendar.current
-        
+
         switch format {
         case .years:
             let years = calendar.dateComponents([.year], from: startDate, to: Date()).year ?? 0
             return years == 1 ? "Year" : "Years"
-            
+
         case .months:
             let months = calendar.dateComponents([.month], from: startDate, to: Date()).month ?? 0
             return months == 1 ? "Month" : "Months"
-            
+
         case .days:
             let days = calendar.dateComponents([.day], from: startDate, to: Date()).day ?? 0
             return days == 1 ? "Day" : "Days"
-            
+
         case .monthsAndDays:
-            return "" // Already included in timeValue
+            return "" // Handled separately in the view
         }
+    }
+
+    private var monthsValue: Int {
+        guard let startDate = widget.configuration?.startDate else { return 0 }
+        let calendar = Calendar.current
+        let components = calendar.dateComponents([.month], from: startDate, to: Date())
+        return max(0, components.month ?? 0)
+    }
+
+    private var daysValue: Int {
+        guard let startDate = widget.configuration?.startDate else { return 0 }
+        let calendar = Calendar.current
+        let components = calendar.dateComponents([.month, .day], from: startDate, to: Date())
+        return max(0, components.day ?? 0)
     }
     
     var body: some View {
         VStack(spacing: 16) {
             Spacer()
-            
-            // Calendar icon
-            ZStack {
-                Circle()
-                    .fill(Color.blue.opacity(0.3))
-                    .frame(width: 80, height: 80)
-                
-                Image(systemName: "calendar.badge.checkmark")
-                    .font(.system(size: 40))
-                    .foregroundColor(.blue)
-            }
-            
-            // Time count
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Text(timeValue)
-                    .font(.system(size: 56, weight: .bold, design: .rounded))
-                    .foregroundColor(.white)
-                    .minimumScaleFactor(0.5)
-                    .lineLimit(1)
-                
-                if !timeUnit.isEmpty {
-                    Text(timeUnit)
-                        .font(.title2)
-                        .foregroundColor(.white.opacity(0.7))
+
+            // Time count - different layout for monthsAndDays
+            if widget.configuration?.timeDisplayFormat == .monthsAndDays {
+                HStack(spacing: 40) {
+                    VStack(spacing: 20) {
+                        Text("\(monthsValue)")
+                            .font(.system(size: 140, weight: .bold, design: .rounded))
+                            .foregroundColor(.white)
+                            .minimumScaleFactor(0.4)
+                            .lineLimit(1)
+                        Text(monthsValue == 1 ? "Month" : "Months")
+                            .font(.caption)
+                            .foregroundColor(.white.opacity(0.7))
+                    }
+
+                    Text("|")
+                        .font(.system(size: 120, weight: .thin))
+                        .foregroundColor(.white.opacity(0.3))
+
+                    VStack(spacing: 20) {
+                        Text("\(daysValue)")
+                            .font(.system(size: 140, weight: .bold, design: .rounded))
+                            .foregroundColor(.white)
+                            .minimumScaleFactor(0.4)
+                            .lineLimit(1)
+                        Text(daysValue == 1 ? "Day" : "Days")
+                            .font(.caption)
+                            .foregroundColor(.white.opacity(0.7))
+                    }
+                }
+            } else {
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Text(timeValue)
+                        .font(.system(size: 56, weight: .bold, design: .rounded))
+                        .foregroundColor(.white)
+                        .minimumScaleFactor(0.5)
+                        .lineLimit(1)
+
+                    if !timeUnit.isEmpty {
+                        Text(timeUnit)
+                            .font(.title2)
+                            .foregroundColor(.white.opacity(0.7))
+                    }
                 }
             }
-            
+
+            Spacer()
+                .frame(height: 30)
+
             Text(widget.configuration?.timeDisplayFormat.unitLabel ?? "In Business")
                 .font(.title3)
                 .foregroundColor(.white.opacity(0.8))
                 .lineLimit(2)
                 .multilineTextAlignment(.center)
-            
+
             Spacer()
-            
-            // Decorative icon
-            Image(systemName: "star.fill")
-                .font(.system(size: 32))
-                .foregroundColor(.yellow.opacity(0.6))
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding(24)
@@ -580,7 +603,7 @@ struct RoomStatusWidgetView: View {
             
             // Footer with pagination dots
             HStack {
-                Text("Updated \(RoomStatusService.relativeTime(from: data.timestamp))")
+                Text("Updated: \(RoomStatusService.relativeTime(from: data.timestamp))")
                     .font(.caption)
                     .foregroundColor(.white.opacity(0.6))
                 
@@ -610,59 +633,40 @@ struct RoomStatusWidgetView: View {
     
     // MARK: - ✨ IMPROVED 2x Design (Professional with Current Bookings)
     private func expanded2xRoomStatusView(data: RoomStatusResponse) -> some View {
-        VStack(spacing: 14) {
+        VStack(spacing: 0) {
             // Compact header
             HStack {
                 Image(systemName: "door.left.hand.open")
                     .font(.title3)
                     .foregroundColor(.blue)
-                
+
                 Text("Room Status")
                     .font(.title3.bold())
                     .foregroundColor(.white)
-                
+
                 Spacer()
-                
-                // Summary
-                HStack(spacing: 10) {
-                    HStack(spacing: 4) {
-                        Circle()
-                            .fill(Color.green)
-                            .frame(width: 7, height: 7)
-                        Text("\(data.availableCount)")
-                            .font(.subheadline.bold())
-                            .foregroundColor(.green)
-                    }
-                    
-                    HStack(spacing: 4) {
-                        Circle()
-                            .fill(Color.red)
-                            .frame(width: 7, height: 7)
-                        Text("\(data.occupiedCount)")
-                            .font(.subheadline.bold())
-                            .foregroundColor(.red)
-                    }
-                }
-                .padding(.horizontal, 10)
-                .padding(.vertical, 5)
-                .background(Color.white.opacity(0.1))
-                .cornerRadius(12)
             }
-            .padding(.bottom, 2)
-            
+            .padding(.bottom, 18)
+
+            // Divider line after header
+            Divider()
+                .background(Color.white.opacity(0.3))
+                .padding(.bottom, 22)
+
             // All rooms with professional layout
-            VStack(spacing: 10) {
+            VStack(spacing: 16) {
                 ForEach(data.rooms) { room in
                     professionalRoomCard(room: room)
                 }
             }
-            
+
             Spacer(minLength: 0)
-            
+
             // Compact footer
-            Text("Updated \(RoomStatusService.relativeTime(from: data.timestamp))")
+            Text("Updated: \(RoomStatusService.relativeTime(from: data.timestamp))")
                 .font(.caption2)
                 .foregroundColor(.white.opacity(0.5))
+                .padding(.top, 12)
         }
         .padding(18)
         .background {
@@ -676,95 +680,34 @@ struct RoomStatusWidgetView: View {
     
     // MARK: - ✨ Professional Room Card (for 2x view)
     private func professionalRoomCard(room: RoomInfo) -> some View {
-        VStack(spacing: 0) {
-            // Top: Room name & status
-            HStack(spacing: 8) {
-                // Status dot
-                Circle()
-                    .fill(statusColor(for: room.status))
-                    .frame(width: 8, height: 8)
-                
-                // Room number & name
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(room.roomNumber)
-                        .font(.caption2.bold())
-                        .foregroundColor(.white.opacity(0.6))
-                    Text(room.name)
-                        .font(.subheadline.bold())
-                        .foregroundColor(.white)
-                        .lineLimit(1)
-                }
-                
-                Spacer()
-                
-                // Status badge
-                Text(room.status.displayName)
-                    .font(.caption2.bold())
-                    .foregroundColor(statusColor(for: room.status))
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 3)
-                    .background(statusColor(for: room.status).opacity(0.15))
-                    .cornerRadius(6)
+        HStack(spacing: 10) {
+            // Room name & number (switched order)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(room.name)
+                    .font(.system(size: 40, weight: .bold))
+                    .foregroundColor(.white)
+                    .lineLimit(1)
+                Text(room.roomNumber)
+                    .font(.caption.bold())
+                    .foregroundColor(.white.opacity(0.6))
             }
-            
-            // Bottom: Current booking (always show if exists)
-            if let booking = room.currentBooking {
-                VStack(alignment: .leading, spacing: 4) {
-                    Divider()
-                        .background(Color.white.opacity(0.2))
-                        .padding(.vertical, 6)
-                    
-                    HStack(spacing: 6) {
-                        Image(systemName: "person.2.fill")
-                            .font(.caption2)
-                            .foregroundColor(.orange)
-                        
-                        Text(booking.title)
-                            .font(.caption)
-                            .foregroundColor(.white.opacity(0.9))
-                            .lineLimit(1)
-                        
-                        Spacer()
-                        
-                        if let timeRemaining = RoomStatusService.timeRemaining(until: booking.endTime) {
-                            HStack(spacing: 3) {
-                                Image(systemName: "clock.fill")
-                                    .font(.caption2)
-                                Text(timeRemaining)
-                                    .font(.caption2.bold())
-                            }
-                            .foregroundColor(.orange)
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .background(Color.orange.opacity(0.15))
-                            .cornerRadius(4)
-                        }
-                    }
-                }
-            } else {
-                // Show "Available now" for empty rooms
-                VStack(alignment: .leading, spacing: 4) {
-                    Divider()
-                        .background(Color.white.opacity(0.2))
-                        .padding(.vertical, 6)
-                    
-                    HStack(spacing: 6) {
-                        Image(systemName: "checkmark.circle.fill")
-                            .font(.caption2)
-                            .foregroundColor(.green)
-                        
-                        Text("Available now")
-                            .font(.caption)
-                            .foregroundColor(.green.opacity(0.9))
-                        
-                        Spacer()
-                    }
-                }
-            }
+
+            Spacer()
+
+            // Status badge
+            Text(room.status.displayName)
+                .font(.caption.bold())
+                .foregroundColor(.white)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .background(Color.white.opacity(0.2))
+                .cornerRadius(8)
         }
-        .padding(12)
-        .background(Color.white.opacity(0.08))
-        .cornerRadius(10)
+        .padding(.vertical, 18)
+        .padding(.horizontal, 16)
+        .frame(maxWidth: .infinity)
+        .background(statusColor(for: room.status).opacity(room.status == .available ? 0.3 : 0.4))
+        .cornerRadius(12)
     }
     
     // MARK: - Helper Views
@@ -885,6 +828,265 @@ struct RoomStatusWidgetView: View {
     }
 }
 
+// MARK: - Upcoming Events Widget
+struct UpcomingEventsWidgetView: View {
+    let widget: Widget
+    
+    @State private var nextEvent: LocariusEvent?
+    @State private var isLoading = false
+    @State private var error: String?
+    @State private var lastUpdate: Date?
+    @State private var refreshTimer: Timer?
+    
+    var body: some View {
+        Group {
+            if isLoading && nextEvent == nil {
+                loadingView
+            } else if let error = error {
+                errorView(error: error)
+            } else if let event = nextEvent {
+                eventView(event: event)
+            } else {
+                placeholderView
+            }
+        }
+        .onAppear {
+            Task {
+                await fetchNextEvent()
+            }
+            startRefreshTimer()
+        }
+        .onDisappear {
+            stopRefreshTimer()
+        }
+    }
+    
+    // MARK: - Event Display
+    private func eventView(event: LocariusEvent) -> some View {
+        VStack(spacing: 16) {
+            Spacer()
+            
+            // Calendar icon
+            ZStack {
+                Circle()
+                    .fill(Color.blue.opacity(0.3))
+                    .frame(width: 80, height: 80)
+                
+                Image(systemName: "calendar.badge.clock")
+                    .font(.system(size: 40))
+                    .foregroundColor(.blue)
+            }
+            
+            // Event name (with line breaks at : and ( )
+            Text(formatEventName(event.name))
+                .font(.system(size: 24, weight: .bold, design: .rounded))
+                .foregroundColor(.white)
+                .multilineTextAlignment(.center)
+                .lineLimit(4)
+                .minimumScaleFactor(0.7)
+                .padding(.horizontal, 20)
+            
+            // Date and time
+            Text(event.displayDate)
+                .font(.title3)
+                .foregroundColor(.white.opacity(0.8))
+                .multilineTextAlignment(.center)
+                .lineLimit(2)
+                .padding(.horizontal, 20)
+            
+            Spacer()
+            
+            // Last update time
+            if let lastUpdate = lastUpdate {
+                HStack(spacing: 6) {
+                    Image(systemName: "clock.arrow.circlepath")
+                        .font(.caption2)
+                    Text("Updated: \(timeAgo(from: lastUpdate))")
+                        .font(.caption2)
+                }
+                .foregroundColor(.white.opacity(0.5))
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(24)
+        .background {
+            LinearGradient(
+                colors: [Color.blue.opacity(0.3), Color.purple.opacity(0.3)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        }
+    }
+    
+    // MARK: - Helper Views
+    private var loadingView: some View {
+        VStack(spacing: 16) {
+            ProgressView()
+                .progressViewStyle(CircularProgressViewStyle(tint: .blue))
+                .scaleEffect(1.5)
+            
+            Text("Loading Events...")
+                .font(.headline)
+                .foregroundColor(.white)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(24)
+        .background {
+            LinearGradient(
+                colors: [Color.blue.opacity(0.3), Color.purple.opacity(0.3)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        }
+    }
+    
+    private func errorView(error: String) -> some View {
+        VStack(spacing: 16) {
+            Image(systemName: "exclamationmark.triangle")
+                .font(.system(size: 40))
+                .foregroundColor(.red)
+            
+            Text("Error Loading Events")
+                .font(.headline)
+                .foregroundColor(.white)
+            
+            Text(error)
+                .font(.caption)
+                .foregroundColor(.white.opacity(0.7))
+                .multilineTextAlignment(.center)
+                .lineLimit(3)
+                .padding(.horizontal)
+            
+            Button {
+                Task {
+                    await fetchNextEvent()
+                }
+            } label: {
+                Label("Retry", systemImage: "arrow.clockwise")
+                    .font(.caption)
+            }
+            .buttonStyle(.bordered)
+            .tint(.blue)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(24)
+        .background {
+            LinearGradient(
+                colors: [Color.blue.opacity(0.3), Color.purple.opacity(0.3)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        }
+    }
+    
+    private var placeholderView: some View {
+        VStack(spacing: 16) {
+            Image(systemName: "calendar.badge.clock")
+                .font(.system(size: 40))
+                .foregroundColor(.gray)
+            
+            Text("Upcoming Events")
+                .font(.headline)
+                .foregroundColor(.white)
+            
+            Text("Configure API token to load events")
+                .font(.caption)
+                .foregroundColor(.white.opacity(0.7))
+                .multilineTextAlignment(.center)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(24)
+        .background {
+            LinearGradient(
+                colors: [Color.blue.opacity(0.3), Color.purple.opacity(0.3)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        }
+    }
+    
+    // MARK: - Data Fetching
+    private func fetchNextEvent() async {
+        print("🎯 UpcomingEventsWidget: Starting fetchNextEvent()")
+        
+        isLoading = true
+        error = nil
+        
+        do {
+            print("🔑 UpcomingEventsWidget: Getting token from AppConfig...")
+            let token = AppConfig.shared.locariusAPIToken
+            print("✅ UpcomingEventsWidget: Token received (length: \(token.count))")
+            
+            print("📡 UpcomingEventsWidget: Calling LocariusEventService.fetchUpcomingEvents...")
+            let events = try await LocariusEventService.shared.fetchUpcomingEvents(token: token)
+            print("✅ UpcomingEventsWidget: Received \(events.count) events")
+            
+            print("🔍 UpcomingEventsWidget: Finding next event...")
+            let next = LocariusEventService.shared.getNextEvent(from: events)
+            
+            if let next = next {
+                print("✅ UpcomingEventsWidget: Found next event: \(next.name)")
+            } else {
+                print("⚠️ UpcomingEventsWidget: No next event found")
+            }
+            
+            await MainActor.run {
+                print("🎨 UpcomingEventsWidget: Updating UI on MainActor")
+                self.nextEvent = next
+                self.lastUpdate = Date()
+                self.isLoading = false
+                print("✅ UpcomingEventsWidget: UI updated successfully")
+            }
+        } catch {
+            print("❌ UpcomingEventsWidget: Error occurred: \(error)")
+            print("   Error type: \(type(of: error))")
+            print("   Error description: \(error.localizedDescription)")
+            
+            await MainActor.run {
+                self.error = error.localizedDescription
+                self.isLoading = false
+                print("❌ UpcomingEventsWidget: Error state set in UI")
+            }
+        }
+        
+        print("🏁 UpcomingEventsWidget: fetchNextEvent() completed")
+    }
+    
+    // MARK: - Auto-refresh
+    private func startRefreshTimer() {
+        // Refresh every 5 minutes
+        refreshTimer = Timer.scheduledTimer(withTimeInterval: 300.0, repeats: true) { _ in
+            Task {
+                await fetchNextEvent()
+            }
+        }
+    }
+    
+    private func stopRefreshTimer() {
+        refreshTimer?.invalidate()
+        refreshTimer = nil
+    }
+    
+    // MARK: - Helpers
+    private func timeAgo(from date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "h:mm a"
+        formatter.timeZone = TimeZone(identifier: "America/Halifax")
+        let timeString = formatter.string(from: date)
+        return "\(timeString) AST"
+    }
+    
+    private func formatEventName(_ name: String) -> String {
+        // Replace : with newline for better formatting
+        var formatted = name.replacingOccurrences(of: ": ", with: "\n")
+        
+        // Replace opening parenthesis with newline
+        formatted = formatted.replacingOccurrences(of: " (", with: "\n(")
+        
+        return formatted
+    }
+}
+
 // MARK: - Placeholder Widget (for unimplemented types)
 struct PlaceholderWidgetView: View {
     let widget: Widget
@@ -947,6 +1149,9 @@ func createWidgetView(for widget: Widget) -> some View {
     
     case .roomStatus:
         RoomStatusWidgetView(widget: widget)
+    
+    case .upcomingEvents:
+        UpcomingEventsWidgetView(widget: widget)
         
     // TODO: Implement remaining widgets
     default:

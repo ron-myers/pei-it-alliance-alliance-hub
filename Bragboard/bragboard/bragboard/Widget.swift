@@ -153,6 +153,9 @@ enum WidgetType: String, Codable, CaseIterable {
     // Operations
     case roomStatus = "roomStatus"                        // Real-time room availability status
     
+    // Events
+    case upcomingEvents = "upcomingEvents"                // Next upcoming event from Locarius
+    
     // ========== TODO: FUTURE WIDGETS ==========
     
     // Social Media (pending API approval)
@@ -197,6 +200,7 @@ enum WidgetType: String, Codable, CaseIterable {
         case .daysSinceIncident: return "Days Since Incident"
         case .hiringBadge: return "We're Hiring"
         case .roomStatus: return "Room Status"
+        case .upcomingEvents: return "Upcoming Events"
             
         // TODO
         case .youtubeSubscribers: return "YouTube Subscribers"
@@ -230,6 +234,7 @@ enum WidgetType: String, Codable, CaseIterable {
         case .daysSinceIncident: return "checkmark.shield"
         case .hiringBadge: return "person.badge.plus"
         case .roomStatus: return "door.left.hand.open"
+        case .upcomingEvents: return "calendar.badge.clock"
             
         // TODO
         case .youtubeSubscribers: return "play.rectangle"
@@ -265,13 +270,15 @@ enum WidgetType: String, Codable, CaseIterable {
         case .locationsMap, .countriesServed: return .geographic
         case .teamSize, .hiringBadge: return .team
         case .roomStatus: return .operations
+        case .upcomingEvents: return .events
         }
     }
     
     var isImplemented: Bool {
         switch self {
         case .companyLogo, .customerCount, .instagramFollowers, .locationsMap,
-             .yearsInBusiness, .daysSinceIncident, .hiringBadge, .roomStatus:
+             .yearsInBusiness, .daysSinceIncident, .hiringBadge, .roomStatus,
+             .upcomingEvents:
             return true
         default:
             return false
@@ -301,4 +308,5 @@ enum WidgetCategory: String, CaseIterable {
     case geographic = "Geographic"
     case team = "Team"
     case operations = "Operations"
+    case events = "Events"
 }

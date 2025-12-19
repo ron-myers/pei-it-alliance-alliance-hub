@@ -310,16 +310,18 @@ class RoomStatusService {
             let shouldKeep = endInFuture && startsWithin24h
             
             let status = shouldKeep ? "✅ KEEP" : "❌ DROP"
-            print("   \(status): '\(booking.title)'")
-            print("      Start: \(timeFormatter.string(from: startDate))")
-            print("      End: \(timeFormatter.string(from: endDate))")
+            //Louis come back here hehe walao console printing 
+            //print("   \(status): '\(booking.title)'")
+            //print("      Start: \(timeFormatter.string(from: startDate))")
+            //print("      End: \(timeFormatter.string(from: endDate))")
+          
             
             if !endInFuture {
-                print("      Reason: Already ended")
+                //print("      Reason: Already ended")
             } else if !startsWithin24h {
-                print("      Reason: Starts more than 24h in future")
+                //print("      Reason: Starts more than 24h in future")
             }
-            print("")
+            //print("")
             
             return shouldKeep
         }
@@ -827,25 +829,18 @@ class RoomStatusService {
         return displayFormatter.string(from: date)
     }
     
-    /// Get relative time (e.g., "2 min ago")
+    /// Get relative time (e.g., "1:00 p.m. AST")
     static func relativeTime(from isoString: String) -> String {
-        let formatter = ISO8601DateFormatter()
-        guard let date = formatter.date(from: isoString) else {
+        let isoFormatter = ISO8601DateFormatter()
+        guard let date = isoFormatter.date(from: isoString) else {
             return "Unknown"
         }
-        
-        let now = Date()
-        let interval = now.timeIntervalSince(date)
-        
-        let minutes = Int(interval / 60)
-        if minutes < 1 {
-            return "Just now"
-        } else if minutes < 60 {
-            return "\(minutes) min ago"
-        } else {
-            let hours = minutes / 60
-            return "\(hours)h ago"
-        }
+
+        let timeFormatter = DateFormatter()
+        timeFormatter.dateFormat = "h:mm a"
+        timeFormatter.timeZone = TimeZone(identifier: "America/Halifax")
+        let timeString = timeFormatter.string(from: date)
+        return "\(timeString) AST"
     }
     
     /// Get time remaining until end of booking
