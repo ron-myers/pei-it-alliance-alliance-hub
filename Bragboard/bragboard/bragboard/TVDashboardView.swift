@@ -48,9 +48,9 @@ struct TVDashboardView: View {
                 // Dynamic background
                 backgroundColor.ignoresSafeArea()
 
-                // Simple state-based page switching
-                Group {
-                    if currentPage == 0 {
+                // Simple state-based page switching with sliding animation
+                GeometryReader { geometry in
+                    ZStack(alignment: .leading) {
                         // Page 0: Dashboard
                         ZStack {
                             if allWidgets.isEmpty && !isSyncing {
@@ -67,11 +67,13 @@ struct TVDashboardView: View {
                                 dashboardView
                             }
                         }
-                        .transition(.opacity)
-                    } else {
+                        .frame(width: geometry.size.width, height: geometry.size.height)
+                        .offset(x: currentPage == 0 ? 0 : -geometry.size.width)
+
                         // Page 1: Logo page
                         logoPage
-                            .transition(.opacity)
+                            .frame(width: geometry.size.width, height: geometry.size.height)
+                            .offset(x: currentPage == 1 ? 0 : geometry.size.width)
                     }
                 }
 
@@ -329,10 +331,12 @@ struct TVDashboardView: View {
         ZStack {
             backgroundColor.ignoresSafeArea()
 
-            Image("PIA logo-02")
+            // Use dark mode logo (larger size) in dark mode, light mode logo in light mode
+            Image(colorScheme == .dark ? "PIA logo-14" : "PIA logo-02")
                 .resizable()
                 .scaledToFit()
-                .frame(maxWidth: 1200, maxHeight: 1200)
+                .frame(maxWidth: colorScheme == .dark ? 3500 : 1200,
+                       maxHeight: colorScheme == .dark ? 3500 : 1200)
         }
         .tag(1)
     }
@@ -415,11 +419,27 @@ struct TVDashboardView: View {
         // Cancel any existing timer
         stopSlidingTimer()
 
-        // Create new timer that fires every 20 seconds
-        slidingTimer = Timer.scheduledTimer(withTimeInterval: 20.0, repeats: true) { _ in
+        // Schedule next page transition based on current page
+        scheduleNextPageTransition()
+    }
+
+    private func scheduleNextPageTransition() {
+        // Cancel any existing timer
+        stopSlidingTimer()
+
+        // Determine duration based on current page
+        // Page 0 (Dashboard/Widget): 7 seconds
+        // Page 1 (Logo): 3 seconds
+        let duration: TimeInterval = currentPage == 0 ? 7.0 : 3.0
+
+        // Create timer for the appropriate duration
+        slidingTimer = Timer.scheduledTimer(withTimeInterval: duration, repeats: false) { [self] _ in
             withAnimation(.easeInOut(duration: 1.0)) {
                 currentPage = (currentPage + 1) % pageCount
             }
+
+            // Schedule the next transition
+            scheduleNextPageTransition()
         }
     }
 

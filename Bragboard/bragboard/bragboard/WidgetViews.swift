@@ -111,20 +111,21 @@ struct CustomerCounterWidgetView: View {
 // MARK: - Instagram Followers Widget (Manual Input)
 struct InstagramFollowersWidgetView: View {
     let widget: Widget
-    
+    @Environment(\.colorScheme) private var colorScheme
+
     private var followerCount: Int {
         widget.configuration?.instagramFollowerCount ?? 0
     }
-    
+
     private var username: String {
         let name = widget.configuration?.instagramUsername ?? ""
         return name.isEmpty ? "Instagram" : "@\(name)"
     }
-    
+
     var body: some View {
         VStack(spacing: 16) {
             Spacer()
-            
+
             // Instagram icon
             ZStack {
                 RoundedRectangle(cornerRadius: 16)
@@ -136,37 +137,48 @@ struct InstagramFollowersWidgetView: View {
                         )
                     )
                     .frame(width: 80, height: 80)
-                
+
                 Image(systemName: "camera.fill")
                     .font(.system(size: 40))
                     .foregroundColor(.white)
             }
-            
+
             // Follower count
             Text(MockDataService.formatNumber(followerCount))
                 .font(.system(size: 56, weight: .bold, design: .rounded))
                 .foregroundColor(.white)
                 .minimumScaleFactor(0.5)
                 .lineLimit(1)
-            
+
             // Label with username
             VStack(spacing: 4) {
                 Text("Followers")
                     .font(.title3)
                     .foregroundColor(.white.opacity(0.8))
                     .lineLimit(1)
-                
+
                 Text(username)
                     .font(.caption)
                     .foregroundColor(.white.opacity(0.6))
                     .lineLimit(1)
             }
-            
+
             Spacer()
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding(24)
-        .background(Color.black.opacity(0.3))
+        .background {
+            // Use gradient background in dark mode, solid background in light mode
+            if colorScheme == .dark {
+                LinearGradient(
+                    colors: [Color.purple.opacity(0.3), Color.pink.opacity(0.3)],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            } else {
+                Color.black.opacity(0.3)
+            }
+        }
     }
 }
 
