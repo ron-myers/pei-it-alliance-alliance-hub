@@ -89,6 +89,7 @@ final class WidgetConfiguration {
     // Geographic data
     var locationNames: [String] = []
     var locationCount: Int = 0
+    var countriesServed: [String] = ["CA"]  // ISO country codes, default: Canada (Charlottetown, PEI)
     
     // Room status display options
     var showRoomNumber: Bool = false
@@ -278,7 +279,7 @@ enum WidgetType: String, Codable, CaseIterable {
         switch self {
         case .companyLogo, .customerCount, .instagramFollowers, .locationsMap,
              .yearsInBusiness, .daysSinceIncident, .hiringBadge, .roomStatus,
-             .upcomingEvents:
+             .upcomingEvents, .countriesServed:
             return true
         default:
             return false

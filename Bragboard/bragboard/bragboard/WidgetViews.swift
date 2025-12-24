@@ -843,12 +843,14 @@ struct RoomStatusWidgetView: View {
 // MARK: - Upcoming Events Widget
 struct UpcomingEventsWidgetView: View {
     let widget: Widget
-    
+
     @State private var nextEvent: LocariusEvent?
     @State private var isLoading = false
     @State private var error: String?
     @State private var lastUpdate: Date?
     @State private var refreshTimer: Timer?
+    @State private var countdownTimer: Timer?
+    @State private var currentTime = Date()
     
     var body: some View {
         Group {
@@ -867,9 +869,66 @@ struct UpcomingEventsWidgetView: View {
                 await fetchNextEvent()
             }
             startRefreshTimer()
+            startCountdownTimer()
         }
         .onDisappear {
             stopRefreshTimer()
+            stopCountdownTimer()
+        }
+    }
+
+    // MARK: - Countdown Helpers
+    private func isEventToday(_ event: LocariusEvent) -> Bool {
+        guard let eventDate = event.startDate else { return false }
+        let calendar = Calendar.current
+        return calendar.isDateInToday(eventDate)
+    }
+
+    private func eventEndDate(_ event: LocariusEvent) -> Date? {
+        guard let startDate = event.startDate else { return nil }
+        // Assume 4-hour duration
+        return calendar.date(byAdding: .hour, value: 4, to: startDate)
+    }
+
+    private var calendar: Calendar {
+        Calendar.current
+    }
+
+    private func isEventHappeningNow(_ event: LocariusEvent) -> Bool {
+        guard let startDate = event.startDate,
+              let endDate = eventEndDate(event) else { return false }
+        let now = currentTime
+        return now >= startDate && now < endDate
+    }
+
+    private func timeUntilEvent(_ event: LocariusEvent) -> TimeInterval? {
+        guard let startDate = event.startDate else { return nil }
+        return startDate.timeIntervalSince(currentTime)
+    }
+
+    private func shouldShowCountdown(_ event: LocariusEvent) -> Bool {
+        isEventToday(event) && !isEventHappeningNow(event)
+    }
+
+    private func formatCountdown(_ event: LocariusEvent) -> String {
+        guard let timeRemaining = timeUntilEvent(event), timeRemaining > 0 else {
+            return ""
+        }
+
+        let hours = Int(timeRemaining) / 3600
+        let minutes = Int(timeRemaining) / 60 % 60
+        let seconds = Int(timeRemaining) % 60
+
+        // If more than 1 hour away, show "X hr Y min"
+        if timeRemaining > 3600 {
+            if minutes > 0 {
+                return "\(hours) hr \(minutes) min"
+            } else {
+                return "\(hours) hr"
+            }
+        } else {
+            // Within 1 hour, show "MM:SS"
+            return String(format: "%02d:%02d", minutes, seconds)
         }
     }
     
@@ -877,18 +936,18 @@ struct UpcomingEventsWidgetView: View {
     private func eventView(event: LocariusEvent) -> some View {
         VStack(spacing: 16) {
             Spacer()
-            
+
             // Calendar icon
             ZStack {
                 Circle()
                     .fill(Color.blue.opacity(0.3))
                     .frame(width: 80, height: 80)
-                
-                Image(systemName: "calendar.badge.clock")
+
+                Image(systemName: isEventHappeningNow(event) ? "calendar.badge.exclamationmark" : "calendar.badge.clock")
                     .font(.system(size: 40))
-                    .foregroundColor(.blue)
+                    .foregroundColor(isEventHappeningNow(event) ? .green : .blue)
             }
-            
+
             // Event name (with line breaks at : and ( )
             Text(formatEventName(event.name))
                 .font(.system(size: 24, weight: .bold, design: .rounded))
@@ -897,17 +956,35 @@ struct UpcomingEventsWidgetView: View {
                 .lineLimit(4)
                 .minimumScaleFactor(0.7)
                 .padding(.horizontal, 20)
-            
-            // Date and time
-            Text(event.displayDate)
-                .font(.title3)
-                .foregroundColor(.white.opacity(0.8))
-                .multilineTextAlignment(.center)
-                .lineLimit(2)
-                .padding(.horizontal, 20)
-            
+
+            // Countdown or Date display
+            if isEventHappeningNow(event) {
+                // Show "Happening now" when event is in progress
+                Text("Happening now")
+                    .font(.system(size: 32, weight: .bold, design: .rounded))
+                    .foregroundColor(.green)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 20)
+            } else if shouldShowCountdown(event) {
+                // Show countdown when event is today
+                Text(formatCountdown(event))
+                    .font(.system(size: 56, weight: .bold, design: .rounded))
+                    .foregroundColor(.orange)
+                    .multilineTextAlignment(.center)
+                    .monospacedDigit()
+                    .padding(.horizontal, 20)
+            } else {
+                // Show normal date and time for future events
+                Text(event.displayDate)
+                    .font(.title3)
+                    .foregroundColor(.white.opacity(0.8))
+                    .multilineTextAlignment(.center)
+                    .lineLimit(2)
+                    .padding(.horizontal, 20)
+            }
+
             Spacer()
-            
+
             // Last update time
             if let lastUpdate = lastUpdate {
                 HStack(spacing: 6) {
@@ -1073,10 +1150,23 @@ struct UpcomingEventsWidgetView: View {
             }
         }
     }
-    
+
     private func stopRefreshTimer() {
         refreshTimer?.invalidate()
         refreshTimer = nil
+    }
+
+    // MARK: - Countdown Timer
+    private func startCountdownTimer() {
+        // Update every second for countdown
+        countdownTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { _ in
+            currentTime = Date()
+        }
+    }
+
+    private func stopCountdownTimer() {
+        countdownTimer?.invalidate()
+        countdownTimer = nil
     }
     
     // MARK: - Helpers
@@ -1096,6 +1186,136 @@ struct UpcomingEventsWidgetView: View {
         formatted = formatted.replacingOccurrences(of: " (", with: "\n(")
         
         return formatted
+    }
+}
+
+// MARK: - Countries Served Widget
+struct CountriesServedWidgetView: View {
+    let widget: Widget
+    @Environment(\.colorScheme) private var colorScheme
+
+    private var selectedCountries: [Country] {
+        let countryService = CountryDataService.shared
+        let countryIds = widget.configuration?.countriesServed ?? ["CA"]
+        return countryIds.compactMap { countryService.getCountry(byId: $0) }
+    }
+
+    private var countryCount: Int {
+        selectedCountries.count
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            // Header section
+            VStack(spacing: 8) {
+                HStack(spacing: 8) {
+                    Image(systemName: "globe.americas.fill")
+                        .font(.title2)
+                        .foregroundColor(.blue)
+
+                    Text("\(countryCount) \(countryCount == 1 ? "Country" : "Countries") Served")
+                        .font(.title3.bold())
+                        .foregroundColor(.white)
+                }
+                .padding(.top, 16)
+
+                // Default location indicator
+                if selectedCountries.contains(where: { $0.id == "CA" }) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "star.fill")
+                            .font(.caption2)
+                            .foregroundColor(.yellow)
+                        Text("Charlottetown, PEI")
+                            .font(.caption)
+                            .foregroundColor(.white.opacity(0.7))
+                    }
+                }
+            }
+
+            // World map visualization with fade edges
+            GeometryReader { geometry in
+                ZStack {
+                    // World map background (flat representation)
+                    Rectangle()
+                        .fill(Color.white.opacity(0.05))
+
+                    // Country markers on flat map
+                    ForEach(selectedCountries) { country in
+                        let position = projectToFlatMap(
+                            lat: country.latitude,
+                            lon: country.longitude,
+                            width: geometry.size.width,
+                            height: geometry.size.height
+                        )
+
+                        // Marker with country name
+                        VStack(spacing: 4) {
+                            ZStack {
+                                Circle()
+                                    .fill(country.id == "CA" ? Color.red : Color.blue)
+                                    .frame(width: country.id == "CA" ? 16 : 12, height: country.id == "CA" ? 16 : 12)
+
+                                if country.id == "CA" {
+                                    Image(systemName: "star.fill")
+                                        .foregroundColor(.white)
+                                        .font(.system(size: 6))
+                                }
+                            }
+
+                            #if os(tvOS)
+                            // Show country names on TV
+                            Text(country.name)
+                                .font(.caption2)
+                                .foregroundColor(.white)
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 4)
+                                        .fill(Color.black.opacity(0.6))
+                                )
+                            #endif
+                        }
+                        .position(position)
+                    }
+                }
+                .mask(
+                    // Radial gradient mask for fade-out edges
+                    RadialGradient(
+                        gradient: Gradient(stops: [
+                            .init(color: .white, location: 0.4),
+                            .init(color: .white, location: 0.7),
+                            .init(color: .clear, location: 1.0)
+                        ]),
+                        center: .center,
+                        startRadius: 0,
+                        endRadius: geometry.size.width * 0.7
+                    )
+                )
+            }
+            .padding(.horizontal, 20)
+            .padding(.vertical, 12)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background {
+            LinearGradient(
+                colors: [Color.blue.opacity(0.3), Color.teal.opacity(0.3)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        }
+    }
+
+    // Project lat/lon to flat map coordinates (Equirectangular projection)
+    // Adjusted for proper world positioning: NA left, Asia middle, Australia bottom-right
+    private func projectToFlatMap(lat: Double, lon: Double, width: CGFloat, height: CGFloat) -> CGPoint {
+        // Convert longitude (-180 to 180) to x position (0 to width)
+        let x = (lon + 180) * Double(width) / 360
+
+        // Convert latitude (90 to -90) to y position (0 to height)
+        // Inverted so north is up
+        let y = (90 - lat) * Double(height) / 180
+
+        return CGPoint(x: x, y: y)
     }
 }
 
@@ -1164,7 +1384,10 @@ func createWidgetView(for widget: Widget) -> some View {
     
     case .upcomingEvents:
         UpcomingEventsWidgetView(widget: widget)
-        
+
+    case .countriesServed:
+        CountriesServedWidgetView(widget: widget)
+
     // TODO: Implement remaining widgets
     default:
         PlaceholderWidgetView(widget: widget)

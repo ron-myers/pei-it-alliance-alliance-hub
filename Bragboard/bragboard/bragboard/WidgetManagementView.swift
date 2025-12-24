@@ -314,7 +314,10 @@ struct WidgetConfigView: View {
         
         case .roomStatus:
             roomStatusConfiguration
-            
+
+        case .countriesServed:
+            countriesServedConfiguration
+
         default:
             Section("Configuration") {
                 Text("Configuration options coming soon")
@@ -434,7 +437,7 @@ struct WidgetConfigView: View {
                 .textInputAutocapitalization(.never)
                 #endif
             }
-            
+
             // Follower count field
             HStack {
                 Text("Followers")
@@ -451,7 +454,7 @@ struct WidgetConfigView: View {
                 .textFieldStyle(.roundedBorder)
                 .frame(width: 150)
             }
-            
+
             // Helper text
             Text("Enter your Instagram username (without @) and current follower count")
                 .font(.caption)
@@ -775,20 +778,84 @@ struct WidgetConfigView: View {
                     Image(systemName: "network")
                         .foregroundColor(.green)
                         .font(.title3)
-                    
+
                     VStack(alignment: .leading, spacing: 4) {
                         Text("The Foundry Room Hub API")
                             .font(.subheadline)
                             .fontWeight(.medium)
-                        
+
                         Text("https://thefoundryroomhub.ca/RoomStatusAPI")
                             .font(.caption2)
                             .foregroundColor(.secondary)
-                        
+
                         Text("Live data • Updates automatically")
                             .font(.caption2)
                             .foregroundColor(.green)
                             .padding(.top, 4)
+                    }
+                }
+            }
+        }
+    }
+
+    private var countriesServedConfiguration: some View {
+        Group {
+            Section("Countries Selection") {
+                NavigationLink {
+                    CountrySelectionView(widget: widget)
+                } label: {
+                    HStack {
+                        Image(systemName: "globe.americas.fill")
+                            .foregroundColor(.blue)
+                            .font(.title3)
+
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Select Countries")
+                                .font(.body)
+
+                            let count = widget.configuration?.countriesServed.count ?? 1
+                            Text("\(count) \(count == 1 ? "country" : "countries") selected")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+
+                        Spacer()
+
+                        Image(systemName: "chevron.right")
+                            .foregroundColor(.secondary)
+                            .font(.caption)
+                    }
+                }
+            }
+
+            Section("Default Location") {
+                HStack(alignment: .top, spacing: 12) {
+                    Image(systemName: "mappin.circle.fill")
+                        .foregroundColor(.red)
+                        .font(.title3)
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Charlottetown, PEI, Canada")
+                            .font(.subheadline)
+                            .fontWeight(.medium)
+
+                        Text("Default location is always marked on the map")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                }
+            }
+
+            Section("Display") {
+                HStack(alignment: .top, spacing: 12) {
+                    Image(systemName: "info.circle")
+                        .foregroundColor(.blue)
+                        .font(.caption)
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("On Apple TV, selected countries will be displayed on a world map. The map shows all selected countries with markers indicating your service areas.")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
                     }
                 }
             }

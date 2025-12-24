@@ -291,42 +291,40 @@ class RoomStatusService {
         timeFormatter.dateStyle = .short
         timeFormatter.timeStyle = .short
         
-        print("\n🔍 Filtering Bookings:")
-        print("   Current time: \(timeFormatter.string(from: now))")
-        print("   24h cutoff: \(timeFormatter.string(from: twentyFourHoursLater))")
-        print("   Total bookings to filter: \(bookings.count)\n")
+        //print("\n🔍 Filtering Bookings:")
+        //print("   Current time: \(timeFormatter.string(from: now))")
+        //print("   24h cutoff: \(timeFormatter.string(from: twentyFourHoursLater))")
+        //print("   Total bookings to filter: \(bookings.count)\n")
         
         let filtered = bookings.filter { booking in
             guard let startDate = booking.startDate, let endDate = booking.endDate else {
-                print("   ❌ Skipped (invalid dates): \(booking.title)")
+                //print("   ❌ Skipped (invalid dates): \(booking.title)")
                 return false
             }
-            
+
             // Keep if:
             // 1. End time is in the future (includes currently active bookings)
             // 2. Starts within the next 24 hours
             let endInFuture = endDate > now
             let startsWithin24h = startDate < twentyFourHoursLater
             let shouldKeep = endInFuture && startsWithin24h
-            
-            let status = shouldKeep ? "✅ KEEP" : "❌ DROP"
-            //Louis come back here hehe walao console printing 
+
+            //let status = shouldKeep ? "✅ KEEP" : "❌ DROP"
             //print("   \(status): '\(booking.title)'")
             //print("      Start: \(timeFormatter.string(from: startDate))")
             //print("      End: \(timeFormatter.string(from: endDate))")
-          
-            
-            if !endInFuture {
-                //print("      Reason: Already ended")
-            } else if !startsWithin24h {
-                //print("      Reason: Starts more than 24h in future")
-            }
+
+            //if !endInFuture {
+            //    print("      Reason: Already ended")
+            //} else if !startsWithin24h {
+            //    print("      Reason: Starts more than 24h in future")
+            //}
             //print("")
-            
+
             return shouldKeep
         }
-        
-        print("📊 Filtering result: Kept \(filtered.count) of \(bookings.count) bookings\n")
+
+        //print("📊 Filtering result: Kept \(filtered.count) of \(bookings.count) bookings\n")
         return filtered
     }
     
@@ -340,37 +338,37 @@ class RoomStatusService {
         timeFormatter.timeStyle = .long
         timeFormatter.timeZone = TimeZone.current
         
-        print("\n⏰ Current Time Analysis:")
-        print("   Local Time: \(timeFormatter.string(from: now))")
-        print("   Timezone: \(TimeZone.current.identifier) (UTC\(TimeZone.current.secondsFromGMT() / 3600))")
-        print("   Processing \(bookings.count) bookings for \(rooms.count) rooms\n")
+        //print("\n⏰ Current Time Analysis:")
+        //print("   Local Time: \(timeFormatter.string(from: now))")
+        //print("   Timezone: \(TimeZone.current.identifier) (UTC\(TimeZone.current.secondsFromGMT() / 3600))")
+        //print("   Processing \(bookings.count) bookings for \(rooms.count) rooms\n")
         
         var availableCount = 0
         var occupiedCount = 0
         
         let roomInfos = rooms.map { room -> RoomInfo in
-            print("🏢 Processing room: \(room.name) (ID: \(room.id))")
-            
+            //print("🏢 Processing room: \(room.name) (ID: \(room.id))")
+
             // Find bookings for this room
             let roomBookings = bookings.filter { $0.roomId == room.id }
-            print("   Found \(roomBookings.count) booking(s) for this room")
-            
+            //print("   Found \(roomBookings.count) booking(s) for this room")
+
             // Find current booking (if any)
             let currentBooking = roomBookings.first { booking in
                 guard let start = booking.startDate, let end = booking.endDate else {
-                    print("   ⚠️ Skipping booking with invalid dates: \(booking.id)")
+                    //print("   ⚠️ Skipping booking with invalid dates: \(booking.id)")
                     return false
                 }
                 let isActive = now >= start && now <= end
-                
-                if isActive {
-                    print("   ✅ CURRENT BOOKING FOUND: '\(booking.title)'")
-                    print("      Ends at: \(timeFormatter.string(from: end))")
-                }
-                
+
+                //if isActive {
+                //    print("   ✅ CURRENT BOOKING FOUND: '\(booking.title)'")
+                //    print("      Ends at: \(timeFormatter.string(from: end))")
+                //}
+
                 return isActive
             }
-            
+
             // Find next booking (earliest future booking)
             let futureBookings = roomBookings.filter { booking in
                 guard let start = booking.startDate else { return false }
@@ -380,22 +378,22 @@ class RoomStatusService {
                 return start1 < start2
             }
             let nextBooking = futureBookings.first
-            
-            if let next = nextBooking, let nextStart = next.startDate {
-                print("   📅 Next booking: '\(next.title)' at \(timeFormatter.string(from: nextStart))")
-            } else {
-                print("   📅 No upcoming bookings")
-            }
-            
+
+            //if let next = nextBooking, let nextStart = next.startDate {
+            //    print("   📅 Next booking: '\(next.title)' at \(timeFormatter.string(from: nextStart))")
+            //} else {
+            //    print("   📅 No upcoming bookings")
+            //}
+
             // Determine status
             let status: RoomStatus = currentBooking != nil ? .occupied : .available
-            
+
             if status == .available {
                 availableCount += 1
-                print("   🟢 Status: AVAILABLE\n")
+                //print("   🟢 Status: AVAILABLE\n")
             } else {
                 occupiedCount += 1
-                print("   🔴 Status: OCCUPIED\n")
+                //print("   🔴 Status: OCCUPIED\n")
             }
             
             // Convert Base44 bookings to RoomInfo format
@@ -429,10 +427,10 @@ class RoomStatusService {
             )
         }
         
-        print("📊 Final Summary:")
-        print("   Total Rooms: \(roomInfos.count)")
-        print("   Available: \(availableCount)")
-        print("   Occupied: \(occupiedCount)\n")
+        //print("📊 Final Summary:")
+        //print("   Total Rooms: \(roomInfos.count)")
+        //print("   Available: \(availableCount)")
+        //print("   Occupied: \(occupiedCount)\n")
         
         return RoomStatusResponse(
             timestamp: ISO8601DateFormatter().string(from: now),

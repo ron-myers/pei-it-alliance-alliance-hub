@@ -22,6 +22,8 @@ struct TVDashboardView: View {
     @State private var syncStatus = ""
     @State private var showingDebugInfo = false
     @State private var showSidebar = false
+    @State private var showMenuButton = false  // Auto-hide menu button
+    @State private var hideButtonTimer: Timer?  // Timer to hide button after inactivity
 
     // ✨ NEW: Shuffled widget positions for burn-in prevention
     @State private var shuffledWidgets: [Widget] = []
@@ -30,14 +32,21 @@ struct TVDashboardView: View {
     // ✨ NEW: Page sliding for Apple TV interface
     @State private var currentPage = 0
     @State private var slidingTimer: Timer?
-    private let pageCount = 3 // Dashboard, Logo, Calendar
+    private let pageCount = 4 // Dashboard, Logo, Calendar, World Map
 
     // Calendar events
     @State private var events: [LocariusEvent] = []
     @State private var isLoadingEvents = false
+    @State private var calendarViewMode: CalendarViewMode = .month
+
+    enum CalendarViewMode {
+        case month
+        case threeDays
+    }
 
     var enabledWidgets: [Widget] {
-        allWidgets.filter { $0.isEnabled }
+        // Filter out Countries Served widget - it's only shown as full-screen page, not in dashboard
+        allWidgets.filter { $0.isEnabled && $0.type != .countriesServed }
     }
     
     // Dynamic background color based on theme
@@ -83,6 +92,11 @@ struct TVDashboardView: View {
                         calendarPage
                             .frame(width: geometry.size.width, height: geometry.size.height)
                             .offset(x: CGFloat(2 - currentPage) * geometry.size.width)
+
+                        // Page 3: World Map page
+                        worldMapPage
+                            .frame(width: geometry.size.width, height: geometry.size.height)
+                            .offset(x: CGFloat(3 - currentPage) * geometry.size.width)
                     }
                     .clipped() // Prevent pages from showing outside the viewport
                 }
@@ -143,13 +157,16 @@ struct TVDashboardView: View {
                 .zIndex(2)
             }
 
-            // Menu button (top-left corner)
-            if !showSidebar {
+            // Menu button (top-left corner) - Auto-hide
+            if !showSidebar && showMenuButton {
                 VStack {
                     HStack {
                         Button {
                             withAnimation(.easeInOut(duration: 0.3)) {
                                 showSidebar.toggle()
+                                // Hide menu button when sidebar opens
+                                showMenuButton = false
+                                stopHideButtonTimer()
                             }
                         } label: {
                             Image(systemName: "line.3.horizontal")
@@ -171,7 +188,35 @@ struct TVDashboardView: View {
                     Spacer()
                 }
                 .zIndex(3)
+                .transition(.opacity.combined(with: .scale(scale: 0.8)))
             }
+
+            // Page indicators (bottom center) - Apple TV style
+            if !showSidebar {
+                VStack {
+                    Spacer()
+
+                    HStack(spacing: 12) {
+                        ForEach(0..<3, id: \.self) { index in
+                            Circle()
+                                .fill(currentPage == index ? Color.white : Color.white.opacity(0.4))
+                                .frame(width: currentPage == index ? 12 : 8, height: currentPage == index ? 12 : 8)
+                                .animation(.spring(response: 0.3, dampingFraction: 0.7), value: currentPage)
+                        }
+                    }
+                    .padding(.bottom, 40)
+                }
+                .zIndex(3)
+            }
+        }
+        .contentShape(Rectangle())
+        .onTapGesture {
+            // Show menu button on tap
+            withAnimation(.easeInOut(duration: 0.2)) {
+                showMenuButton = true
+            }
+            // Start timer to hide it after 30 seconds
+            startHideButtonTimer()
         }
         .onAppear {
             print("📺 TVDashboardView appeared")
@@ -198,6 +243,7 @@ struct TVDashboardView: View {
             // Clean up timers
             stopShuffleTimer()
             stopSlidingTimer()
+            stopHideButtonTimer()
         }
     }
     
@@ -211,7 +257,7 @@ struct TVDashboardView: View {
                     withAnimation(.easeInOut(duration: 0.3)) {
                         showSidebar = false
                         currentPage = 0 // Return to dashboard
-                        // Restart auto-slide timer when returning to home
+                        // Restart auto-slide timer (cycles through Dashboard -> Logo -> Calendar)
                         startSlidingTimer()
                     }
                 } label: {
@@ -285,8 +331,7 @@ struct TVDashboardView: View {
                     withAnimation(.easeInOut(duration: 0.3)) {
                         showSidebar = false
                         currentPage = 2 // Navigate to calendar page
-                        // Stop auto-slide timer when viewing calendar
-                        stopSlidingTimer()
+                        // Auto-slide will continue from calendar page
                     }
                 } label: {
                     HStack(spacing: 20) {
@@ -294,6 +339,30 @@ struct TVDashboardView: View {
                             .font(.system(size: 26, weight: .medium))
                             .frame(width: 30)
                         Text("Calendar")
+                            .font(.system(size: 32, weight: .medium))
+                    }
+                    .foregroundColor(colorScheme == .dark ? .white : .black)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 36)
+                    .padding(.vertical, 16)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+
+                // World Map button
+                Button {
+                    withAnimation(.easeInOut(duration: 0.3)) {
+                        showSidebar = false
+                        currentPage = 3 // Navigate to world map page
+                        // Stop auto-slide timer when viewing map (manual navigation)
+                        stopSlidingTimer()
+                    }
+                } label: {
+                    HStack(spacing: 20) {
+                        Image(systemName: "globe.americas.fill")
+                            .font(.system(size: 26, weight: .medium))
+                            .frame(width: 30)
+                        Text("World Map")
                             .font(.system(size: 32, weight: .medium))
                     }
                     .foregroundColor(colorScheme == .dark ? .white : .black)
@@ -345,82 +414,234 @@ struct TVDashboardView: View {
             backgroundColor.ignoresSafeArea()
 
             VStack(spacing: 0) {
-                // Calendar header with title
+                // Calendar header with title and toggle button
                 HStack {
                     Spacer()
                         .frame(width: 140) // Space for menu button
 
-                    Text(getCurrentMonthYear())
+                    Text(calendarViewMode == .month ? getCurrentMonthYear() : "Upcoming Days")
                         .font(.system(size: 48, weight: .bold))
                         .foregroundColor(colorScheme == .dark ? .white : .black)
 
                     Spacer()
+
+                    // Toggle button (top right)
+                    Button {
+                        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                            calendarViewMode = calendarViewMode == .month ? .threeDays : .month
+                        }
+                    } label: {
+                        Image(systemName: calendarViewMode == .month ? "calendar.day.timeline.left" : "calendar")
+                            .font(.system(size: 28, weight: .medium))
+                            .foregroundColor(colorScheme == .dark ? .white : .black)
+                            .frame(width: 70, height: 70)
+                            .background(
+                                RoundedRectangle(cornerRadius: 16)
+                                    .fill(colorScheme == .dark ? Color.white.opacity(0.15) : Color.black.opacity(0.1))
+                            )
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.trailing, 50)
                 }
                 .padding(.horizontal, 50)
                 .padding(.top, 70)
                 .padding(.bottom, 35)
 
-                // Days of week header
-                HStack(spacing: 15) {
-                    ForEach(["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"], id: \.self) { day in
-                        Text(day)
-                            .font(.system(size: 24, weight: .semibold))
-                            .foregroundColor(colorScheme == .dark ? .white.opacity(0.6) : .black.opacity(0.5))
-                            .frame(maxWidth: .infinity)
-                    }
+                // Show either month or 3-day view based on mode
+                if calendarViewMode == .month {
+                    monthView
+                } else {
+                    threeDayView
                 }
-                .padding(.horizontal, 50)
-                .padding(.bottom, 25)
-
-                // Calendar grid
-                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 15), count: 7), spacing: 15) {
-                    ForEach(getCalendarDays(), id: \.self) { day in
-                        if day == 0 {
-                            // Empty cell for padding
-                            Text("")
-                                .frame(height: 130)
-                        } else {
-                            // Day cell
-                            let event = getEventForDay(day)
-
-                            ZStack(alignment: .topTrailing) {
-                                RoundedRectangle(cornerRadius: 12)
-                                    .fill(isToday(day: day)
-                                        ? Color.blue
-                                        : (colorScheme == .dark ? Color.white.opacity(0.1) : Color.black.opacity(0.08)))
-
-                                // Day number in top right corner
-                                Text("\(day)")
-                                    .font(.system(size: 20, weight: isToday(day: day) ? .bold : .medium))
-                                    .foregroundColor(isToday(day: day)
-                                        ? .white.opacity(0.9)
-                                        : (colorScheme == .dark ? .white.opacity(0.6) : .black.opacity(0.5)))
-                                    .padding(8)
-
-                                // Event name in center
-                                if let event = event {
-                                    Text(event.name)
-                                        .font(.system(size: 16, weight: .semibold))
-                                        .foregroundColor(isToday(day: day)
-                                            ? .white
-                                            : (colorScheme == .dark ? .white : .black))
-                                        .multilineTextAlignment(.center)
-                                        .lineLimit(3)
-                                        .padding(.horizontal, 8)
-                                        .padding(.vertical, 12)
-                                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                                }
-                            }
-                            .frame(height: 130)
-                        }
-                    }
-                }
-                .padding(.horizontal, 50)
-
-                Spacer()
             }
         }
         .tag(2)
+    }
+
+    // MARK: - Month View
+    private var monthView: some View {
+        VStack(spacing: 0) {
+            // Days of week header
+            HStack(spacing: 15) {
+                ForEach(["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"], id: \.self) { day in
+                    Text(day)
+                        .font(.system(size: 24, weight: .semibold))
+                        .foregroundColor(colorScheme == .dark ? .white.opacity(0.6) : .black.opacity(0.5))
+                        .frame(maxWidth: .infinity)
+                }
+            }
+            .padding(.horizontal, 50)
+            .padding(.bottom, 25)
+
+            // Calendar grid
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 15), count: 7), spacing: 15) {
+                ForEach(getCalendarDays(), id: \.self) { day in
+                    if day == 0 {
+                        // Empty cell for padding
+                        Text("")
+                            .frame(height: 130)
+                    } else {
+                        // Day cell
+                        let event = getEventForDay(day)
+
+                        ZStack(alignment: .topTrailing) {
+                            RoundedRectangle(cornerRadius: 12)
+                                .fill(isToday(day: day)
+                                    ? Color.blue
+                                    : (colorScheme == .dark ? Color.white.opacity(0.1) : Color.black.opacity(0.08)))
+
+                            // Day number in top right corner
+                            Text("\(day)")
+                                .font(.system(size: 20, weight: isToday(day: day) ? .bold : .medium))
+                                .foregroundColor(isToday(day: day)
+                                    ? .white.opacity(0.9)
+                                    : (colorScheme == .dark ? .white.opacity(0.6) : .black.opacity(0.5)))
+                                .padding(8)
+
+                            // Event name in center
+                            if let event = event {
+                                Text(event.name)
+                                    .font(.system(size: 16, weight: .semibold))
+                                    .foregroundColor(isToday(day: day)
+                                        ? .white
+                                        : (colorScheme == .dark ? .white : .black))
+                                    .multilineTextAlignment(.center)
+                                    .lineLimit(3)
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 12)
+                                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                            }
+                        }
+                        .frame(height: 130)
+                    }
+                }
+            }
+            .padding(.horizontal, 50)
+
+            Spacer()
+        }
+    }
+
+    // MARK: - 3-Day View
+    private var threeDayView: some View {
+        let threeDays = getNextThreeDays()
+        let timeRange = calculateTimeRange(for: threeDays)
+
+        return HStack(alignment: .top, spacing: 20) {
+            ForEach(threeDays, id: \.date) { dayInfo in
+                VStack(spacing: 0) {
+                    // Day header
+                    VStack(spacing: 8) {
+                        Text(dayInfo.dayName)
+                            .font(.system(size: 22, weight: .bold))
+                            .foregroundColor(dayInfo.isToday ? .blue : (colorScheme == .dark ? .white : .black))
+
+                        Text(dayInfo.dateString)
+                            .font(.system(size: 16))
+                            .foregroundColor(colorScheme == .dark ? .white.opacity(0.6) : .black.opacity(0.5))
+                    }
+                    .padding(.bottom, 20)
+
+                    // Time slots with events
+                    if dayInfo.events.isEmpty {
+                        // No events - show placeholder
+                        VStack(spacing: 16) {
+                            Spacer()
+                            Image(systemName: "calendar.badge.minus")
+                                .font(.system(size: 50))
+                                .foregroundColor(colorScheme == .dark ? .white.opacity(0.3) : .black.opacity(0.2))
+                            Text("No events recorded")
+                                .font(.system(size: 20))
+                                .foregroundColor(colorScheme == .dark ? .white.opacity(0.5) : .black.opacity(0.4))
+                            Spacer()
+                        }
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .background(
+                            RoundedRectangle(cornerRadius: 16)
+                                .fill(colorScheme == .dark ? Color.white.opacity(0.05) : Color.black.opacity(0.03))
+                        )
+                    } else {
+                        // Has events - show timeline
+                        ScrollView(showsIndicators: false) {
+                            VStack(spacing: 0) {
+                                ForEach(timeRange.startHour...timeRange.endHour, id: \.self) { hour in
+                                    timeSlotRow(hour: hour, events: dayInfo.events, isToday: dayInfo.isToday)
+                                }
+                            }
+                        }
+                        .background(
+                            RoundedRectangle(cornerRadius: 16)
+                                .fill(colorScheme == .dark ? Color.white.opacity(0.05) : Color.black.opacity(0.03))
+                        )
+                    }
+                }
+                .frame(maxWidth: .infinity)
+            }
+        }
+        .padding(.horizontal, 50)
+        .padding(.bottom, 40)
+    }
+
+    // Time slot row for 3-day view
+    private func timeSlotRow(hour: Int, events: [LocariusEvent], isToday: Bool) -> some View {
+        let eventsInHour = events.filter { event in
+            guard let startDate = event.startDate else { return false }
+            let calendar = Calendar.current
+            return calendar.component(.hour, from: startDate) == hour
+        }
+
+        return HStack(spacing: 12) {
+            // Time label
+            Text(formatHour(hour))
+                .font(.system(size: 16, weight: .medium))
+                .foregroundColor(colorScheme == .dark ? .white.opacity(0.6) : .black.opacity(0.5))
+                .frame(width: 80, alignment: .trailing)
+
+            // Event area
+            if eventsInHour.isEmpty {
+                Rectangle()
+                    .fill(Color.clear)
+                    .frame(height: 60)
+                    .overlay(
+                        Rectangle()
+                            .fill(colorScheme == .dark ? Color.white.opacity(0.1) : Color.black.opacity(0.05))
+                            .frame(height: 1),
+                        alignment: .top
+                    )
+            } else {
+                VStack(alignment: .leading, spacing: 4) {
+                    ForEach(eventsInHour, id: \.id) { event in
+                        HStack(spacing: 8) {
+                            Rectangle()
+                                .fill(isToday ? Color.blue : Color.purple)
+                                .frame(width: 4)
+
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(event.name)
+                                    .font(.system(size: 16, weight: .semibold))
+                                    .foregroundColor(colorScheme == .dark ? .white : .black)
+                                    .lineLimit(2)
+
+                                if let startDate = event.startDate {
+                                    Text(formatEventTime(startDate))
+                                        .font(.system(size: 13))
+                                        .foregroundColor(colorScheme == .dark ? .white.opacity(0.6) : .black.opacity(0.5))
+                                }
+                            }
+                            Spacer()
+                        }
+                        .padding(.vertical, 8)
+                        .padding(.horizontal, 10)
+                        .background(
+                            RoundedRectangle(cornerRadius: 8)
+                                .fill(isToday ? Color.blue.opacity(0.2) : Color.purple.opacity(0.15))
+                        )
+                    }
+                }
+                .frame(height: 60)
+            }
+        }
+        .padding(.horizontal, 16)
     }
 
     // Helper functions for calendar
@@ -467,6 +688,234 @@ struct TVDashboardView: View {
         let currentDay = calendar.component(.day, from: today)
         return day == currentDay
     }
+
+    // Helper structures for 3-day view
+    struct DayInfo: Identifiable {
+        let id = UUID()
+        let date: Date
+        let dayName: String
+        let dateString: String
+        let isToday: Bool
+        let events: [LocariusEvent]
+    }
+
+    struct TimeRange {
+        let startHour: Int
+        let endHour: Int
+    }
+
+    // Get next 3 days starting from today
+    private func getNextThreeDays() -> [DayInfo] {
+        let calendar = Calendar.current
+        let today = Date()
+
+        var days: [DayInfo] = []
+
+        for offset in 0..<3 {
+            guard let date = calendar.date(byAdding: .day, value: offset, to: today) else { continue }
+
+            // Format day name
+            let dayFormatter = DateFormatter()
+            dayFormatter.dateFormat = "EEEE"
+            let dayName = dayFormatter.string(from: date)
+
+            // Format date string
+            let dateFormatter = DateFormatter()
+            dateFormatter.dateFormat = "MMM d"
+            let dateString = dateFormatter.string(from: date)
+
+            // Check if today
+            let isToday = calendar.isDateInToday(date)
+
+            // Get events for this day
+            let dayEvents = events.filter { event in
+                guard let eventDate = event.startDate else { return false }
+                return calendar.isDate(eventDate, inSameDayAs: date)
+            }
+
+            days.append(DayInfo(
+                date: date,
+                dayName: dayName,
+                dateString: dateString,
+                isToday: isToday,
+                events: dayEvents
+            ))
+        }
+
+        return days
+    }
+
+    // Calculate dynamic time range based on events across all 3 days
+    private func calculateTimeRange(for days: [DayInfo]) -> TimeRange {
+        let allEvents = days.flatMap { $0.events }
+
+        guard !allEvents.isEmpty else {
+            // No events - default range 8am to 5pm
+            return TimeRange(startHour: 8, endHour: 17)
+        }
+
+        let calendar = Calendar.current
+        var earliestHour = 23
+        var latestHour = 0
+
+        for event in allEvents {
+            guard let startDate = event.startDate else { continue }
+
+            let startHour = calendar.component(.hour, from: startDate)
+
+            // Estimate end time as 2 hours after start (typical event duration)
+            let estimatedEndHour = min(23, startHour + 2)
+
+            earliestHour = min(earliestHour, startHour)
+            latestHour = max(latestHour, estimatedEndHour)
+        }
+
+        // Add padding - 2 hours before earliest, 2 hours after latest
+        let startHour = max(0, earliestHour - 2)
+        let endHour = min(23, latestHour + 2)
+
+        // Ensure minimum 8-hour range
+        let minRange = 8
+        if (endHour - startHour) < minRange {
+            let midpoint = (startHour + endHour) / 2
+            let halfRange = minRange / 2
+            return TimeRange(
+                startHour: max(0, midpoint - halfRange),
+                endHour: min(23, midpoint + halfRange)
+            )
+        }
+
+        return TimeRange(startHour: startHour, endHour: endHour)
+    }
+
+    // Format hour for display (e.g., "8:00 AM")
+    private func formatHour(_ hour: Int) -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "h:00 a"
+
+        let calendar = Calendar.current
+        var components = calendar.dateComponents([.year, .month, .day], from: Date())
+        components.hour = hour
+        components.minute = 0
+
+        guard let date = calendar.date(from: components) else { return "\(hour):00" }
+        return formatter.string(from: date)
+    }
+
+    // Format event time (e.g., "2:30 PM")
+    private func formatEventTime(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "h:mm a"
+        return formatter.string(from: date)
+    }
+
+    // MARK: - World Map Page
+    private var worldMapPage: some View {
+        let countryService = CountryDataService.shared
+        let countriesWidget = allWidgets.first { $0.type == .countriesServed }
+        let selectedCountryIds = countriesWidget?.configuration?.countriesServed ?? ["CA"]
+        let selectedCountries = selectedCountryIds.compactMap { countryService.getCountry(byId: $0) }
+
+        return ZStack {
+            backgroundColor.ignoresSafeArea()
+
+            VStack(spacing: 0) {
+                // Header with title
+                HStack {
+                    Spacer()
+                        .frame(width: 140) // Space for menu button
+
+                    Text("Countries Served")
+                        .font(.system(size: 48, weight: .bold))
+                        .foregroundColor(colorScheme == .dark ? .white : .black)
+
+                    Spacer()
+                }
+                .padding(.horizontal, 50)
+                .padding(.top, 70)
+                .padding(.bottom, 35)
+
+                // Simple world map list visualization
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 24) {
+                        // Show each selected country with flag and details
+                        ForEach(selectedCountries) { country in
+                            HStack(spacing: 20) {
+                                // Country marker
+                                ZStack {
+                                    Circle()
+                                        .fill(country.id == "CA" ? Color.red : Color.blue)
+                                        .frame(width: 60, height: 60)
+
+                                    if country.id == "CA" {
+                                        Image(systemName: "star.fill")
+                                            .foregroundColor(.white)
+                                            .font(.system(size: 24))
+                                    } else {
+                                        Image(systemName: "mappin.circle.fill")
+                                            .foregroundColor(.white)
+                                            .font(.system(size: 28))
+                                    }
+                                }
+
+                                // Country info
+                                VStack(alignment: .leading, spacing: 8) {
+                                    Text(country.name)
+                                        .font(.system(size: 32, weight: .bold))
+                                        .foregroundColor(colorScheme == .dark ? .white : .black)
+
+                                    if country.id == "CA" {
+                                        Text("⭐ Default Location: Charlottetown, PEI")
+                                            .font(.system(size: 20))
+                                            .foregroundColor(.yellow)
+                                    } else {
+                                        Text("Coordinates: \(String(format: "%.2f", country.latitude))°, \(String(format: "%.2f", country.longitude))°")
+                                            .font(.system(size: 18))
+                                            .foregroundColor(.secondary)
+                                    }
+                                }
+
+                                Spacer()
+                            }
+                            .padding(24)
+                            .background(
+                                RoundedRectangle(cornerRadius: 16)
+                                    .fill(colorScheme == .dark ? Color.white.opacity(0.1) : Color.black.opacity(0.05))
+                            )
+                        }
+                    }
+                    .padding(.horizontal, 50)
+                    .padding(.vertical, 20)
+                }
+                .frame(maxHeight: .infinity)
+
+                // Footer with country count
+                HStack {
+                    Image(systemName: "mappin.circle.fill")
+                        .foregroundColor(.blue)
+                    Text("\(selectedCountries.count) countries served")
+                        .font(.system(size: 22))
+                        .foregroundColor(colorScheme == .dark ? .white.opacity(0.7) : .black.opacity(0.6))
+
+                    if selectedCountries.contains(where: { $0.id == "CA" }) {
+                        Text("•")
+                            .foregroundColor(colorScheme == .dark ? .white.opacity(0.5) : .black.opacity(0.4))
+                        Image(systemName: "star.fill")
+                            .foregroundColor(.red)
+                            .font(.system(size: 14))
+                        Text("Default: Charlottetown, PEI")
+                            .font(.system(size: 22))
+                            .foregroundColor(colorScheme == .dark ? .white.opacity(0.7) : .black.opacity(0.6))
+                    }
+                }
+                .padding(.bottom, 60)
+
+                Spacer()
+            }
+        }
+        .tag(3)
+    }
+
 
     // MARK: - Dashboard View
     private var dashboardView: some View {
@@ -581,23 +1030,19 @@ struct TVDashboardView: View {
         // Cancel any existing timer
         stopSlidingTimer()
 
-        // Determine duration based on current page
-        // Page 0 (Dashboard/Widget): 7 seconds
-        // Page 1 (Logo): 3 seconds
-        // Page 2 (Calendar): Manual navigation only, skip in auto-slide
-        let duration: TimeInterval = currentPage == 0 ? 7.0 : 3.0
+        // All pages slide every 1 minute (60 seconds)
+        let duration: TimeInterval = 60.0
 
         // Create timer for the appropriate duration
         slidingTimer = Timer.scheduledTimer(withTimeInterval: duration, repeats: false) { [self] _ in
             withAnimation(.easeInOut(duration: 1.0)) {
-                // Only auto-slide between pages 0 and 1, skip calendar (page 2)
+                // Cycle through all pages: Dashboard (0) -> Logo (1) -> Calendar (2) -> Dashboard (0)
                 if currentPage == 0 {
-                    currentPage = 1
+                    currentPage = 1  // Dashboard -> Logo
                 } else if currentPage == 1 {
-                    currentPage = 0
+                    currentPage = 2  // Logo -> Calendar
                 } else {
-                    // If somehow on calendar page, go back to dashboard
-                    currentPage = 0
+                    currentPage = 0  // Calendar -> Dashboard
                 }
             }
 
@@ -609,6 +1054,24 @@ struct TVDashboardView: View {
     private func stopSlidingTimer() {
         slidingTimer?.invalidate()
         slidingTimer = nil
+    }
+
+    // MARK: - Auto-hide Menu Button Timer
+    private func startHideButtonTimer() {
+        // Cancel any existing timer
+        stopHideButtonTimer()
+
+        // Hide button after 30 seconds of inactivity
+        hideButtonTimer = Timer.scheduledTimer(withTimeInterval: 30.0, repeats: false) { [self] _ in
+            withAnimation(.easeInOut(duration: 0.3)) {
+                showMenuButton = false
+            }
+        }
+    }
+
+    private func stopHideButtonTimer() {
+        hideButtonTimer?.invalidate()
+        hideButtonTimer = nil
     }
 
     private func shuffleWidgetPositions() {
