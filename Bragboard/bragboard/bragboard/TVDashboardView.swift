@@ -139,6 +139,7 @@ struct TVDashboardView: View {
                 // Backdrop with blur effect
                 (colorScheme == .dark ? Color.black.opacity(0.6) : Color.black.opacity(0.3))
                     .ignoresSafeArea()
+                    .contentShape(Rectangle())  // CRITICAL: Define explicit hit-test bounds to prevent blocking all touches
                     .onTapGesture {
                         withAnimation(.easeInOut(duration: 0.3)) {
                             showSidebar = false
@@ -179,7 +180,7 @@ struct TVDashboardView: View {
                                         .opacity(0.8)
                                 )
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(.card)
                         .padding(.leading, 60)
                         .padding(.top, 60)
 
@@ -204,20 +205,49 @@ struct TVDashboardView: View {
                                 .animation(.spring(response: 0.3, dampingFraction: 0.7), value: currentPage)
                         }
                     }
-                    .padding(.bottom, 40)
+                    .padding(.bottom, 6)
                 }
                 .zIndex(3)
+                .allowsHitTesting(false)  // Don't block taps
             }
         }
+        #if os(tvOS)
+        .overlay {
+            // Invisible focusable area for tvOS remote interaction
+            // CRITICAL: Only capture touches when menu button is hidden, otherwise it blocks all clicks
+            if !showSidebar && !showMenuButton {
+                Color.clear
+                    .contentShape(Rectangle())
+                    .focusable(true)
+                    .onLongPressGesture(minimumDuration: 0.01) {
+                        // Triggers on Select button press
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            showMenuButton = true
+                        }
+                        startHideButtonTimer()
+                    }
+                    .onPlayPauseCommand {
+                        // Also handle Play/Pause button
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            showMenuButton = true
+                        }
+                        startHideButtonTimer()
+                    }
+            }
+        }
+        #else
         .contentShape(Rectangle())
         .onTapGesture {
-            // Show menu button on tap
-            withAnimation(.easeInOut(duration: 0.2)) {
-                showMenuButton = true
+            // Show menu button on tap/click (iOS)
+            // Only capture tap if menu button is not already visible
+            if !showMenuButton && !showSidebar {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    showMenuButton = true
+                }
+                startHideButtonTimer()
             }
-            // Start timer to hide it after 30 seconds
-            startHideButtonTimer()
         }
+        #endif
         .onAppear {
             print("📺 TVDashboardView appeared")
             print("📺 Total widgets: \(allWidgets.count), Enabled: \(enabledWidgets.count)")
@@ -274,7 +304,7 @@ struct TVDashboardView: View {
                     .padding(.vertical, 16)
                     .contentShape(Rectangle())
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.card)
                 .padding(.top, 70)
 
                 // Debug button
@@ -297,7 +327,7 @@ struct TVDashboardView: View {
                     .padding(.vertical, 16)
                     .contentShape(Rectangle())
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.card)
 
                 // Sync button
                 Button {
@@ -323,7 +353,7 @@ struct TVDashboardView: View {
                     .padding(.vertical, 16)
                     .contentShape(Rectangle())
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.card)
                 .disabled(isSyncing)
 
                 // Calendar button
@@ -347,7 +377,7 @@ struct TVDashboardView: View {
                     .padding(.vertical, 16)
                     .contentShape(Rectangle())
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.card)
 
                 // World Map button
                 Button {
@@ -371,7 +401,7 @@ struct TVDashboardView: View {
                     .padding(.vertical, 16)
                     .contentShape(Rectangle())
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.card)
             }
             .padding(.bottom, 20)
 
