@@ -20,11 +20,17 @@ struct ContentView: View {
                 .tabItem {
                     Label("Widgets", systemImage: "rectangle.3.group")
                 }
-            
+
+            // Photo Album tab (new photo album feature)
+            PhotoAlbumManagementView()
+                .tabItem {
+                    Label("Photo Album", systemImage: "photo.on.rectangle.angled")
+                }
+
             // Legacy photos tab (for existing logo uploads)
             LegacyPhotosView()
                 .tabItem {
-                    Label("Photos", systemImage: "photo")
+                    Label("Legacy", systemImage: "photo.stack")
                 }
         }
     }

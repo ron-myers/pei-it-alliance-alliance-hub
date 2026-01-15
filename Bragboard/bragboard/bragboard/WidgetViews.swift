@@ -524,6 +524,7 @@ struct RoomStatusWidgetView: View {
     @State private var lastUpdate = Date()
     @State private var selectedRoomIndex = 0
     @State private var roomCycleTimer: Timer?
+    @State private var refreshTimer: Timer?
     
     var body: some View {
         Group {
@@ -550,9 +551,11 @@ struct RoomStatusWidgetView: View {
             if !widget.is2x {
                 startRoomCycleTimer()
             }
+            startRefreshTimer()
         }
         .onDisappear {
             stopRoomCycleTimer()
+            stopRefreshTimer()
         }
     }
     
@@ -837,6 +840,20 @@ struct RoomStatusWidgetView: View {
     private func stopRoomCycleTimer() {
         roomCycleTimer?.invalidate()
         roomCycleTimer = nil
+    }
+
+    private func startRefreshTimer() {
+        // Refresh room status every 60 seconds (1 minute)
+        refreshTimer = Timer.scheduledTimer(withTimeInterval: 60.0, repeats: true) { _ in
+            Task {
+                await fetchRoomStatus()
+            }
+        }
+    }
+
+    private func stopRefreshTimer() {
+        refreshTimer?.invalidate()
+        refreshTimer = nil
     }
 }
 

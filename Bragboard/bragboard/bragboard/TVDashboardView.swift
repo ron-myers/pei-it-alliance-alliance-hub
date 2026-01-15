@@ -16,7 +16,8 @@ struct TVDashboardView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.colorScheme) private var colorScheme
     @Query(sort: \Widget.position) private var allWidgets: [Widget]
-    
+    @Query(sort: \AlbumPhoto.displayOrder) private var albumPhotos: [AlbumPhoto]
+
     @State private var lastRefresh = Date()
     @State private var isSyncing = false
     @State private var syncStatus = ""
@@ -32,7 +33,11 @@ struct TVDashboardView: View {
     // ✨ NEW: Page sliding for Apple TV interface
     @State private var currentPage = 0
     @State private var slidingTimer: Timer?
-    private let pageCount = 4 // Dashboard, Logo, Calendar, World Map
+    private let pageCount = 5 // Dashboard, Logo, Calendar, Photos, World Map
+
+    // Photo album state
+    @State private var photoTimer: Timer?
+    @State private var currentPhotoIndex: Int = 0
 
     // Calendar events
     @State private var events: [LocariusEvent] = []
@@ -93,10 +98,15 @@ struct TVDashboardView: View {
                             .frame(width: geometry.size.width, height: geometry.size.height)
                             .offset(x: CGFloat(2 - currentPage) * geometry.size.width)
 
-                        // Page 3: World Map page
-                        worldMapPage
+                        // Page 3: Photos page
+                        photosPage
                             .frame(width: geometry.size.width, height: geometry.size.height)
                             .offset(x: CGFloat(3 - currentPage) * geometry.size.width)
+
+                        // Page 4: World Map page
+                        worldMapPage
+                            .frame(width: geometry.size.width, height: geometry.size.height)
+                            .offset(x: CGFloat(4 - currentPage) * geometry.size.width)
                     }
                     .clipped() // Prevent pages from showing outside the viewport
                 }
@@ -198,7 +208,7 @@ struct TVDashboardView: View {
                     Spacer()
 
                     HStack(spacing: 12) {
-                        ForEach(0..<3, id: \.self) { index in
+                        ForEach(0..<5, id: \.self) { index in
                             Circle()
                                 .fill(currentPage == index ? Color.white : Color.white.opacity(0.4))
                                 .frame(width: currentPage == index ? 12 : 8, height: currentPage == index ? 12 : 8)
@@ -273,6 +283,7 @@ struct TVDashboardView: View {
             // Clean up timers
             stopShuffleTimer()
             stopSlidingTimer()
+            stopPhotoTimer()
             stopHideButtonTimer()
         }
     }
@@ -379,11 +390,34 @@ struct TVDashboardView: View {
                 }
                 .buttonStyle(.card)
 
+                // Photos button
+                Button {
+                    withAnimation(.easeInOut(duration: 0.3)) {
+                        showSidebar = false
+                        currentPage = 3 // Navigate to photos page
+                        // Auto-slide will continue from photos page
+                    }
+                } label: {
+                    HStack(spacing: 20) {
+                        Image(systemName: "photo.on.rectangle.angled")
+                            .font(.system(size: 26, weight: .medium))
+                            .frame(width: 30)
+                        Text("Photos")
+                            .font(.system(size: 32, weight: .medium))
+                    }
+                    .foregroundColor(colorScheme == .dark ? .white : .black)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 36)
+                    .padding(.vertical, 16)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.card)
+
                 // World Map button
                 Button {
                     withAnimation(.easeInOut(duration: 0.3)) {
                         showSidebar = false
-                        currentPage = 3 // Navigate to world map page
+                        currentPage = 4 // Navigate to world map page (updated from 3 to 4)
                         // Stop auto-slide timer when viewing map (manual navigation)
                         stopSlidingTimer()
                     }
@@ -839,6 +873,81 @@ struct TVDashboardView: View {
         return formatter.string(from: date)
     }
 
+    // MARK: - Photos Page
+    private var photosPage: some View {
+        ZStack {
+            backgroundColor.ignoresSafeArea()
+
+            if albumPhotos.isEmpty {
+                // Empty state
+                VStack(spacing: 30) {
+                    Image(systemName: "photo.stack")
+                        .font(.system(size: 120))
+                        .foregroundColor(.secondary)
+                    Text("No Photos in Album")
+                        .font(.largeTitle)
+                    Text("Add photos from your iPhone app")
+                        .font(.title3)
+                        .foregroundColor(.secondary)
+                }
+            } else if currentPhotoIndex < albumPhotos.count {
+                // Display current photo with bounds check
+                let photo = albumPhotos[currentPhotoIndex]
+                let _ = print("📸 Displaying photo at index: \(currentPhotoIndex) of \(albumPhotos.count)")
+
+                VStack(spacing: 0) {
+                    Spacer()
+
+                    if let imageData = photo.imageData,
+                       let uiImage = UIImage(data: imageData) {
+                        Image(uiImage: uiImage)
+                            .resizable()
+                            .scaledToFit()
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                            .padding(80)
+                    }
+
+                    if !photo.caption.isEmpty {
+                        Text(photo.caption)
+                            .font(.system(size: 36, weight: .medium))
+                            .foregroundColor(colorScheme == .dark ? .white : .black)
+                            .multilineTextAlignment(.center)
+                            .lineLimit(3)
+                            .padding(.horizontal, 120)
+                            .padding(.bottom, 80)
+                    }
+
+                    Spacer()
+                }
+                .id("photo-\(currentPhotoIndex)")  // Force view update when photo changes
+                .transition(.opacity)
+            } else {
+                // Index out of bounds - show loading state and reset
+                VStack(spacing: 30) {
+                    Image(systemName: "photo.on.rectangle.angled")
+                        .font(.system(size: 100))
+                        .foregroundColor(.secondary)
+                    Text("Loading photo...")
+                        .font(.title2)
+                        .foregroundColor(.secondary)
+                }
+                .onAppear {
+                    print("📸 Index out of bounds (\(currentPhotoIndex)), resetting to 0")
+                    currentPhotoIndex = 0
+                }
+            }
+        }
+        .onAppear {
+            startPhotoTimer()
+        }
+        .onDisappear {
+            stopPhotoTimer()
+            // Don't reset index - preserve position for next visit
+            // Index will be validated when timer starts again
+            print("📸 Photos page hidden, current index preserved: \(currentPhotoIndex)")
+        }
+    }
+
     // MARK: - World Map Page
     private var worldMapPage: some View {
         let countryService = CountryDataService.shared
@@ -1066,13 +1175,16 @@ struct TVDashboardView: View {
         // Create timer for the appropriate duration
         slidingTimer = Timer.scheduledTimer(withTimeInterval: duration, repeats: false) { [self] _ in
             withAnimation(.easeInOut(duration: 1.0)) {
-                // Cycle through all pages: Dashboard (0) -> Logo (1) -> Calendar (2) -> Dashboard (0)
+                // Cycle through pages: Dashboard (0) -> Logo (1) -> Calendar (2) -> Photos (3) -> Dashboard (0)
+                // World Map (4) is excluded from auto-rotation (manual navigation only)
                 if currentPage == 0 {
                     currentPage = 1  // Dashboard -> Logo
                 } else if currentPage == 1 {
                     currentPage = 2  // Logo -> Calendar
+                } else if currentPage == 2 {
+                    currentPage = 3  // Calendar -> Photos
                 } else {
-                    currentPage = 0  // Calendar -> Dashboard
+                    currentPage = 0  // Photos -> Dashboard (or World Map -> Dashboard if manually navigated)
                 }
             }
 
@@ -1084,6 +1196,48 @@ struct TVDashboardView: View {
     private func stopSlidingTimer() {
         slidingTimer?.invalidate()
         slidingTimer = nil
+    }
+
+    // MARK: - Photo Timer Logic
+    private func startPhotoTimer() {
+        stopPhotoTimer()
+
+        // Only advance if we have photos
+        guard !albumPhotos.isEmpty else {
+            print("📸 No photos in album, timer not started")
+            currentPhotoIndex = 0
+            return
+        }
+
+        // Ensure index is within bounds when starting
+        if currentPhotoIndex >= albumPhotos.count {
+            currentPhotoIndex = 0
+            print("📸 Reset index to 0 (was out of bounds)")
+        }
+
+        print("📸 Starting photo timer. Total photos: \(albumPhotos.count), Starting at index: \(currentPhotoIndex)")
+
+        photoTimer = Timer.scheduledTimer(withTimeInterval: 30.0, repeats: true) { [self] _ in
+            print("📸 Photo timer fired! Current index: \(currentPhotoIndex), Total photos: \(albumPhotos.count)")
+
+            // Guard against empty album
+            guard !albumPhotos.isEmpty else {
+                print("📸 Album is empty, stopping timer")
+                stopPhotoTimer()
+                return
+            }
+
+            withAnimation(.easeInOut(duration: 1.0)) {
+                // Cycle through all photos continuously using fresh count
+                currentPhotoIndex = (currentPhotoIndex + 1) % albumPhotos.count
+                print("📸 Advanced to photo index: \(currentPhotoIndex)")
+            }
+        }
+    }
+
+    private func stopPhotoTimer() {
+        photoTimer?.invalidate()
+        photoTimer = nil
     }
 
     // MARK: - Auto-hide Menu Button Timer

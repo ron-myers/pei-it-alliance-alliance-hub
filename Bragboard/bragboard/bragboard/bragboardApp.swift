@@ -15,7 +15,8 @@ struct bragboardApp: App {
         let schema = Schema([
             Item.self,           // Legacy photo model
             Widget.self,         // New widget model
-            WidgetConfiguration.self  // Widget config model
+            WidgetConfiguration.self,  // Widget config model
+            AlbumPhoto.self      // Photo album model
         ])
         
         // Try CloudKit first
