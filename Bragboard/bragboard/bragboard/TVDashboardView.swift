@@ -33,7 +33,14 @@ struct TVDashboardView: View {
     // ✨ NEW: Page sliding for Apple TV interface
     @State private var currentPage = 0
     @State private var slidingTimer: Timer?
-    private let pageCount = 5 // Dashboard, Logo, Calendar, Photos, World Map
+    private let pageCount = DashboardPage.allCases.count
+
+    // Which pages rotate, for how long, and whether the page indicator shows
+    @State private var settings = DashboardSettings()
+    @State private var showSettings = false
+
+    // Pitch competition clock — takes over the screen, nothing else runs behind it
+    @State private var showPitchTimer = false
 
     // Photo album state
     @State private var photoTimer: Timer?
@@ -42,11 +49,30 @@ struct TVDashboardView: View {
     // Calendar events
     @State private var events: [LocariusEvent] = []
     @State private var isLoadingEvents = false
-    @State private var calendarViewMode: CalendarViewMode = .month
+    @State private var calendarViewMode: CalendarViewMode = .techWeek
+
+    // Event countdown page state
+    @State private var countdownEvent: LocariusEvent?
+    @State private var countdownTimer: Timer?
+    @State private var countdownCurrentTime = Date()
 
     enum CalendarViewMode {
+        case techWeek
         case month
         case threeDays
+    }
+
+    // Tech Week programme, derived from the same Locarius feed as the calendar.
+    // Held in state rather than recomputed, because it is read many times per redraw.
+    @State private var techWeek = TechWeekSchedule(events: [])
+
+    // Co-op Placements roster, read once from the bundled JSON
+    @State private var coopStudents: [CoopStudent] = []
+
+    /// The calendar defaults to the Tech Week strip, and falls back to the month grid once the week has passed
+    private var effectiveCalendarMode: CalendarViewMode {
+        if calendarViewMode == .techWeek && techWeek.isEmpty { return .month }
+        return calendarViewMode
     }
 
     var enabledWidgets: [Widget] {
@@ -103,13 +129,29 @@ struct TVDashboardView: View {
                             .frame(width: geometry.size.width, height: geometry.size.height)
                             .offset(x: CGFloat(3 - currentPage) * geometry.size.width)
 
-                        // Page 4: World Map page
-                        worldMapPage
+                        // Page 4: Event Countdown page
+                        eventCountdownPage
                             .frame(width: geometry.size.width, height: geometry.size.height)
                             .offset(x: CGFloat(4 - currentPage) * geometry.size.width)
+
+                        // Page 5: Tech Week slideshow
+                        TechWeekSlideshowView(schedule: techWeek, isVisible: currentPage == 5)
+                            .frame(width: geometry.size.width, height: geometry.size.height)
+                            .offset(x: CGFloat(5 - currentPage) * geometry.size.width)
+
+                        // Page 6: Co-op Placements slideshow
+                        CoopPlacementsSlideshowView(students: coopStudents, isVisible: currentPage == 6)
+                            .frame(width: geometry.size.width, height: geometry.size.height)
+                            .offset(x: CGFloat(6 - currentPage) * geometry.size.width)
+
+                        // Page 7: Hackathon team announcements
+                        HackathonTeamsView(teams: HackathonRoster.teams)
+                            .frame(width: geometry.size.width, height: geometry.size.height)
+                            .offset(x: CGFloat(7 - currentPage) * geometry.size.width)
                     }
                     .clipped() // Prevent pages from showing outside the viewport
                 }
+                .ignoresSafeArea() // Pages run edge to edge — otherwise coloured pages show a black border
 
                 // Page control buttons (bottom center) - HIDDEN
 //                VStack {
@@ -169,7 +211,7 @@ struct TVDashboardView: View {
             }
 
             // Menu button (top-left corner) - Auto-hide
-            if !showSidebar && showMenuButton {
+            if !showSidebar && !showSettings && !showPitchTimer && showMenuButton {
                 VStack {
                     HStack {
                         Button {
@@ -203,12 +245,12 @@ struct TVDashboardView: View {
             }
 
             // Page indicators (bottom center) - Apple TV style
-            if !showSidebar {
+            if !showSidebar && !showSettings && !showPitchTimer && settings.showPageDots {
                 VStack {
                     Spacer()
 
                     HStack(spacing: 12) {
-                        ForEach(0..<5, id: \.self) { index in
+                        ForEach(0..<pageCount, id: \.self) { index in
                             Circle()
                                 .fill(currentPage == index ? Color.white : Color.white.opacity(0.4))
                                 .frame(width: currentPage == index ? 12 : 8, height: currentPage == index ? 12 : 8)
@@ -220,28 +262,50 @@ struct TVDashboardView: View {
                 .zIndex(3)
                 .allowsHitTesting(false)  // Don't block taps
             }
+
+            // Settings — covers everything, and holds the rotation while it's open
+            if showSettings {
+                DashboardSettingsView(settings: settings) {
+                    withAnimation(.easeInOut(duration: 0.3)) {
+                        showSettings = false
+                    }
+                    startSlidingTimer()
+                }
+                .transition(.opacity)
+                .zIndex(4)
+            }
+
+            // Pitch timer — above everything, including settings - COMMENTED OUT (not needed for now)
+//            if showPitchTimer {
+//                PitchTimerView {
+//                    withAnimation(.easeInOut(duration: 0.3)) {
+//                        showPitchTimer = false
+//                    }
+//                    startSlidingTimer()
+//                }
+//                .transition(.opacity)
+//                .zIndex(5)
+//            }
         }
         #if os(tvOS)
         .overlay {
             // Invisible focusable area for tvOS remote interaction
             // CRITICAL: Only capture touches when menu button is hidden, otherwise it blocks all clicks
-            if !showSidebar && !showMenuButton {
+            if !showSidebar && !showSettings && !showPitchTimer && !showMenuButton {
                 Color.clear
                     .contentShape(Rectangle())
                     .focusable(true)
                     .onLongPressGesture(minimumDuration: 0.01) {
                         // Triggers on Select button press
-                        withAnimation(.easeInOut(duration: 0.2)) {
-                            showMenuButton = true
-                        }
-                        startHideButtonTimer()
+                        revealMenuButton()
                     }
                     .onPlayPauseCommand {
                         // Also handle Play/Pause button
-                        withAnimation(.easeInOut(duration: 0.2)) {
-                            showMenuButton = true
-                        }
-                        startHideButtonTimer()
+                        revealMenuButton()
+                    }
+                    .onMoveCommand { _ in
+                        // Any swipe or arrow on the remote also brings the menu back
+                        revealMenuButton()
                     }
             }
         }
@@ -278,12 +342,22 @@ struct TVDashboardView: View {
 
             // Fetch events for calendar
             fetchEvents()
+
+            // Load the Co-op Placements roster from the bundle
+            coopStudents = CoopStudent.loadRoster()
+
+            // Start whichever timers the opening page needs
+            pageTimers(for: currentPage)
+        }
+        .onChange(of: currentPage) { _, page in
+            pageTimers(for: page)
         }
         .onDisappear {
             // Clean up timers
             stopShuffleTimer()
             stopSlidingTimer()
             stopPhotoTimer()
+            stopCountdownTimer()
             stopHideButtonTimer()
         }
     }
@@ -413,20 +487,18 @@ struct TVDashboardView: View {
                 }
                 .buttonStyle(.card)
 
-                // World Map button
+                // Countdown button
                 Button {
                     withAnimation(.easeInOut(duration: 0.3)) {
                         showSidebar = false
-                        currentPage = 4 // Navigate to world map page (updated from 3 to 4)
-                        // Stop auto-slide timer when viewing map (manual navigation)
-                        stopSlidingTimer()
+                        currentPage = 4 // Navigate to event countdown page
                     }
                 } label: {
                     HStack(spacing: 20) {
-                        Image(systemName: "globe.americas.fill")
+                        Image(systemName: "timer")
                             .font(.system(size: 26, weight: .medium))
                             .frame(width: 30)
-                        Text("World Map")
+                        Text("Countdown")
                             .font(.system(size: 32, weight: .medium))
                     }
                     .foregroundColor(colorScheme == .dark ? .white : .black)
@@ -436,6 +508,148 @@ struct TVDashboardView: View {
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.card)
+
+                // Logo button
+                Button {
+                    withAnimation(.easeInOut(duration: 0.3)) {
+                        showSidebar = false
+                        currentPage = 1 // Navigate to logo page
+                        startSlidingTimer()
+                    }
+                } label: {
+                    HStack(spacing: 20) {
+                        Image(systemName: "building.2")
+                            .font(.system(size: 26, weight: .medium))
+                            .frame(width: 30)
+                        Text("Logo")
+                            .font(.system(size: 32, weight: .medium))
+                    }
+                    .foregroundColor(colorScheme == .dark ? .white : .black)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 36)
+                    .padding(.vertical, 16)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.card)
+
+                // Tech Week button
+                Button {
+                    withAnimation(.easeInOut(duration: 0.3)) {
+                        showSidebar = false
+                        currentPage = 5 // Navigate to Tech Week slideshow
+                        startSlidingTimer()
+                    }
+                } label: {
+                    HStack(spacing: 20) {
+                        Image(systemName: "sparkles.tv")
+                            .font(.system(size: 26, weight: .medium))
+                            .frame(width: 30)
+                        Text("Tech Week")
+                            .font(.system(size: 32, weight: .medium))
+                    }
+                    .foregroundColor(colorScheme == .dark ? .white : .black)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 36)
+                    .padding(.vertical, 16)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.card)
+                .disabled(techWeek.isEmpty)
+
+                // Co-op Placements button
+                Button {
+                    withAnimation(.easeInOut(duration: 0.3)) {
+                        showSidebar = false
+                        currentPage = 6 // Navigate to Co-op Placements slideshow
+                        startSlidingTimer()
+                    }
+                } label: {
+                    HStack(spacing: 20) {
+                        Image(systemName: "graduationcap")
+                            .font(.system(size: 26, weight: .medium))
+                            .frame(width: 30)
+                        Text("Co-op Placements")
+                            .font(.system(size: 32, weight: .medium))
+                    }
+                    .foregroundColor(colorScheme == .dark ? .white : .black)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 36)
+                    .padding(.vertical, 16)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.card)
+                .disabled(coopStudents.isEmpty)
+
+                // Hackathon Teams button
+                Button {
+                    withAnimation(.easeInOut(duration: 0.3)) {
+                        showSidebar = false
+                        currentPage = 7 // Navigate to Hackathon team announcements
+                        startSlidingTimer()
+                    }
+                } label: {
+                    HStack(spacing: 20) {
+                        Image(systemName: "person.3.fill")
+                            .font(.system(size: 26, weight: .medium))
+                            .frame(width: 30)
+                        Text("Hackathon Teams")
+                            .font(.system(size: 32, weight: .medium))
+                    }
+                    .foregroundColor(colorScheme == .dark ? .white : .black)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 36)
+                    .padding(.vertical, 16)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.card)
+                .disabled(HackathonRoster.teams.isEmpty)
+
+                // Pitch Timer button - COMMENTED OUT (not needed for now)
+//                Button {
+//                    withAnimation(.easeInOut(duration: 0.3)) {
+//                        showSidebar = false
+//                        showPitchTimer = true
+//                    }
+//                    stopSlidingTimer()
+//                } label: {
+//                    HStack(spacing: 20) {
+//                        Image(systemName: "stopwatch")
+//                            .font(.system(size: 26, weight: .medium))
+//                            .frame(width: 30)
+//                        Text("Pitch Timer")
+//                            .font(.system(size: 32, weight: .medium))
+//                    }
+//                    .foregroundColor(colorScheme == .dark ? .white : .black)
+//                    .frame(maxWidth: .infinity, alignment: .leading)
+//                    .padding(.horizontal, 36)
+//                    .padding(.vertical, 16)
+//                    .contentShape(Rectangle())
+//                }
+//                .buttonStyle(.card)
+
+                // Settings button
+                Button {
+                    withAnimation(.easeInOut(duration: 0.3)) {
+                        showSidebar = false
+                        showSettings = true
+                    }
+                    stopSlidingTimer()
+                } label: {
+                    HStack(spacing: 20) {
+                        Image(systemName: "slider.horizontal.3")
+                            .font(.system(size: 26, weight: .medium))
+                            .frame(width: 30)
+                        Text("Settings")
+                            .font(.system(size: 32, weight: .medium))
+                    }
+                    .foregroundColor(colorScheme == .dark ? .white : .black)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 36)
+                    .padding(.vertical, 16)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.card)
+
             }
             .padding(.bottom, 20)
 
@@ -483,19 +697,30 @@ struct TVDashboardView: View {
                     Spacer()
                         .frame(width: 140) // Space for menu button
 
-                    Text(calendarViewMode == .month ? getCurrentMonthYear() : "Upcoming Days")
-                        .font(.system(size: 48, weight: .bold))
-                        .foregroundColor(colorScheme == .dark ? .white : .black)
+                    VStack(spacing: 10) {
+                        Text(calendarTitle)
+                            .font(.system(size: 48, weight: .bold))
+                            .foregroundColor(colorScheme == .dark ? .white : .black)
+
+                        if !techWeek.isEmpty && effectiveCalendarMode != .techWeek {
+                            Text("PEI TECH WEEK  ·  \(techWeek.dateRangeLabel)")
+                                .font(.system(size: 20, weight: .heavy, design: .rounded))
+                                .foregroundColor(.white)
+                                .padding(.horizontal, 20)
+                                .padding(.vertical, 8)
+                                .background(Capsule().fill(TechWeekTheme.gradient))
+                        }
+                    }
 
                     Spacer()
 
-                    // Toggle button (top right)
+                    // Toggle button (top right) - cycles Tech Week -> Month -> Upcoming Days
                     Button {
                         withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
-                            calendarViewMode = calendarViewMode == .month ? .threeDays : .month
+                            cycleCalendarMode()
                         }
                     } label: {
-                        Image(systemName: calendarViewMode == .month ? "calendar.day.timeline.left" : "calendar")
+                        Image(systemName: calendarToggleIcon)
                             .font(.system(size: 28, weight: .medium))
                             .foregroundColor(colorScheme == .dark ? .white : .black)
                             .frame(width: 70, height: 70)
@@ -511,15 +736,103 @@ struct TVDashboardView: View {
                 .padding(.top, 70)
                 .padding(.bottom, 35)
 
-                // Show either month or 3-day view based on mode
-                if calendarViewMode == .month {
+                switch effectiveCalendarMode {
+                case .techWeek:
+                    techWeekWeekView
+                case .month:
                     monthView
-                } else {
+                case .threeDays:
                     threeDayView
                 }
             }
         }
         .tag(2)
+    }
+
+    // MARK: - Calendar Header Helpers
+    private var calendarTitle: String {
+        switch effectiveCalendarMode {
+        case .techWeek: return "PEI Tech Week  ·  \(techWeek.dateRangeLabel)"
+        case .month: return getCurrentMonthYear()
+        case .threeDays: return "Upcoming Days"
+        }
+    }
+
+    private var calendarToggleIcon: String {
+        switch effectiveCalendarMode {
+        case .techWeek: return "calendar"
+        case .month: return "calendar.day.timeline.left"
+        case .threeDays: return "sparkles.tv"
+        }
+    }
+
+    private func cycleCalendarMode() {
+        switch effectiveCalendarMode {
+        case .techWeek: calendarViewMode = .month
+        case .month: calendarViewMode = .threeDays
+        case .threeDays: calendarViewMode = techWeek.isEmpty ? .month : .techWeek
+        }
+    }
+
+    // MARK: - Tech Week Week View
+    /// One column per Tech Week day, every session listed — unlike the month grid, which shows one per day
+    private var techWeekWeekView: some View {
+        HStack(alignment: .top, spacing: 18) {
+            ForEach(techWeek.days, id: \.self) { day in
+                VStack(spacing: 14) {
+                    // Day header
+                    VStack(spacing: 0) {
+                        Text(calendarDayLabel(day, format: "EEE").uppercased())
+                            .font(.system(size: 18, weight: .semibold, design: .rounded))
+                        Text(calendarDayLabel(day, format: "d"))
+                            .font(.system(size: 36, weight: .bold, design: .rounded))
+                    }
+                    .foregroundColor(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 10)
+                    .background(RoundedRectangle(cornerRadius: 14).fill(TechWeekTheme.gradient))
+
+                    ForEach(sessions(on: day), id: \.id) { session in
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text(session.timeOfDay)
+                                .font(.system(size: 20, weight: .bold, design: .rounded))
+                                .foregroundColor(TechWeekTheme.coral)
+
+                            Text(session.techWeekTitle)
+                                .font(.system(size: 19, weight: .semibold))
+                                .foregroundColor(colorScheme == .dark ? .white : .black)
+                                .lineLimit(3)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(14)
+                        .background(
+                            RoundedRectangle(cornerRadius: 14)
+                                .fill(colorScheme == .dark ? Color.white.opacity(0.1) : Color.black.opacity(0.06))
+                        )
+                    }
+
+                    Spacer(minLength: 0)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            }
+        }
+        .padding(.horizontal, 50)
+        .padding(.bottom, 70)
+    }
+
+    private func sessions(on day: Date) -> [LocariusEvent] {
+        let calendar = Calendar.current
+        return techWeek.sessions.filter { session in
+            guard let date = session.startDate else { return false }
+            return calendar.isDate(date, inSameDayAs: day)
+        }
+    }
+
+    private func calendarDayLabel(_ date: Date, format: String) -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = format
+        return formatter.string(from: date)
     }
 
     // MARK: - Month View
@@ -547,26 +860,34 @@ struct TVDashboardView: View {
                     } else {
                         // Day cell
                         let event = getEventForDay(day)
+                        let isTechWeek = isTechWeekDay(day: day)
+                        let isHighlighted = isToday(day: day) || isTechWeek
 
                         ZStack(alignment: .topTrailing) {
                             RoundedRectangle(cornerRadius: 12)
                                 .fill(isToday(day: day)
                                     ? Color.blue
                                     : (colorScheme == .dark ? Color.white.opacity(0.1) : Color.black.opacity(0.08)))
+                                .overlay(
+                                    // Tech Week days wear the event branding
+                                    isTechWeek
+                                        ? RoundedRectangle(cornerRadius: 12).fill(TechWeekTheme.gradient).opacity(isToday(day: day) ? 0.55 : 1)
+                                        : nil
+                                )
 
                             // Day number in top right corner
                             Text("\(day)")
-                                .font(.system(size: 20, weight: isToday(day: day) ? .bold : .medium))
-                                .foregroundColor(isToday(day: day)
+                                .font(.system(size: 20, weight: isHighlighted ? .bold : .medium))
+                                .foregroundColor(isHighlighted
                                     ? .white.opacity(0.9)
                                     : (colorScheme == .dark ? .white.opacity(0.6) : .black.opacity(0.5)))
                                 .padding(8)
 
                             // Event name in center
                             if let event = event {
-                                Text(event.name)
+                                Text(isTechWeek ? event.techWeekTitle : event.name)
                                     .font(.system(size: 16, weight: .semibold))
-                                    .foregroundColor(isToday(day: day)
+                                    .foregroundColor(isHighlighted
                                         ? .white
                                         : (colorScheme == .dark ? .white : .black))
                                     .multilineTextAlignment(.center)
@@ -753,6 +1074,14 @@ struct TVDashboardView: View {
         return day == currentDay
     }
 
+    private func isTechWeekDay(day: Int) -> Bool {
+        let calendar = Calendar.current
+        var components = calendar.dateComponents([.year, .month], from: Date())
+        components.day = day
+        guard let dayDate = calendar.date(from: components) else { return false }
+        return techWeek.isTechWeekDay(dayDate)
+    }
+
     // Helper structures for 3-day view
     struct DayInfo: Identifiable {
         let id = UUID()
@@ -937,124 +1266,200 @@ struct TVDashboardView: View {
                 }
             }
         }
-        .onAppear {
-            startPhotoTimer()
-        }
-        .onDisappear {
-            stopPhotoTimer()
-            // Don't reset index - preserve position for next visit
-            // Index will be validated when timer starts again
-            print("📸 Photos page hidden, current index preserved: \(currentPhotoIndex)")
-        }
+        // Timer is driven by currentPage, not onAppear — see pageTimers(for:)
     }
 
-    // MARK: - World Map Page
-    private var worldMapPage: some View {
-        let countryService = CountryDataService.shared
-        let countriesWidget = allWidgets.first { $0.type == .countriesServed }
-        let selectedCountryIds = countriesWidget?.configuration?.countriesServed ?? ["CA"]
-        let selectedCountries = selectedCountryIds.compactMap { countryService.getCountry(byId: $0) }
-
-        return ZStack {
+    // MARK: - Event Countdown Page
+    private var eventCountdownPage: some View {
+        ZStack {
             backgroundColor.ignoresSafeArea()
 
-            VStack(spacing: 0) {
-                // Header with title
-                HStack {
+            if let event = countdownEvent {
+                VStack(spacing: 0) {
                     Spacer()
-                        .frame(width: 140) // Space for menu button
 
-                    Text("Countries Served")
-                        .font(.system(size: 48, weight: .bold))
+                    // Event name
+                    Text(formatEventNameForCountdown(event.name))
+                        .font(.system(size: 96, weight: .bold))
                         .foregroundColor(colorScheme == .dark ? .white : .black)
+                        .multilineTextAlignment(.center)
+                        .lineLimit(3)
+                        .minimumScaleFactor(0.7)
+                        .padding(.horizontal, 120)
 
-                    Spacer()
-                }
-                .padding(.horizontal, 50)
-                .padding(.top, 70)
-                .padding(.bottom, 35)
+                    // Divider
+                    Rectangle()
+                        .fill(colorScheme == .dark ? Color.white.opacity(0.2) : Color.black.opacity(0.1))
+                        .frame(width: 300, height: 3)
+                        .padding(.vertical, 50)
 
-                // Simple world map list visualization
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 24) {
-                        // Show each selected country with flag and details
-                        ForEach(selectedCountries) { country in
-                            HStack(spacing: 20) {
-                                // Country marker
-                                ZStack {
-                                    Circle()
-                                        .fill(country.id == "CA" ? Color.red : Color.blue)
-                                        .frame(width: 60, height: 60)
+                    // Countdown display
+                    Text(formatSmartCountdown(for: event))
+                        .font(.system(size: 280, weight: .bold))
+                        .foregroundColor(countdownTextColor(for: event))
+                        .monospacedDigit()
+                        .minimumScaleFactor(0.5)
+                        .lineLimit(1)
+                        .padding(.horizontal, 60)
 
-                                    if country.id == "CA" {
-                                        Image(systemName: "star.fill")
-                                            .foregroundColor(.white)
-                                            .font(.system(size: 24))
-                                    } else {
-                                        Image(systemName: "mappin.circle.fill")
-                                            .foregroundColor(.white)
-                                            .font(.system(size: 28))
-                                    }
-                                }
+                    // Countdown label
+                    Text(countdownLabel(for: event))
+                        .font(.system(size: 56, weight: .medium))
+                        .foregroundColor(colorScheme == .dark ? .white.opacity(0.6) : .black.opacity(0.5))
+                        .padding(.top, 20)
 
-                                // Country info
-                                VStack(alignment: .leading, spacing: 8) {
-                                    Text(country.name)
-                                        .font(.system(size: 32, weight: .bold))
-                                        .foregroundColor(colorScheme == .dark ? .white : .black)
+                    // Divider
+                    Rectangle()
+                        .fill(colorScheme == .dark ? Color.white.opacity(0.2) : Color.black.opacity(0.1))
+                        .frame(width: 300, height: 3)
+                        .padding(.vertical, 50)
 
-                                    if country.id == "CA" {
-                                        Text("⭐ Default Location: Charlottetown, PEI")
-                                            .font(.system(size: 20))
-                                            .foregroundColor(.yellow)
-                                    } else {
-                                        Text("Coordinates: \(String(format: "%.2f", country.latitude))°, \(String(format: "%.2f", country.longitude))°")
-                                            .font(.system(size: 18))
-                                            .foregroundColor(.secondary)
-                                    }
-                                }
-
-                                Spacer()
-                            }
-                            .padding(24)
-                            .background(
-                                RoundedRectangle(cornerRadius: 16)
-                                    .fill(colorScheme == .dark ? Color.white.opacity(0.1) : Color.black.opacity(0.05))
-                            )
-                        }
-                    }
-                    .padding(.horizontal, 50)
-                    .padding(.vertical, 20)
-                }
-                .frame(maxHeight: .infinity)
-
-                // Footer with country count
-                HStack {
-                    Image(systemName: "mappin.circle.fill")
-                        .foregroundColor(.blue)
-                    Text("\(selectedCountries.count) countries served")
-                        .font(.system(size: 22))
+                    // Event date/time
+                    Text(event.displayDate)
+                        .font(.system(size: 64, weight: .medium))
                         .foregroundColor(colorScheme == .dark ? .white.opacity(0.7) : .black.opacity(0.6))
 
-                    if selectedCountries.contains(where: { $0.id == "CA" }) {
-                        Text("•")
-                            .foregroundColor(colorScheme == .dark ? .white.opacity(0.5) : .black.opacity(0.4))
-                        Image(systemName: "star.fill")
-                            .foregroundColor(.red)
-                            .font(.system(size: 14))
-                        Text("Default: Charlottetown, PEI")
-                            .font(.system(size: 22))
-                            .foregroundColor(colorScheme == .dark ? .white.opacity(0.7) : .black.opacity(0.6))
-                    }
+                    Spacer()
                 }
-                .padding(.bottom, 60)
-
-                Spacer()
+            } else {
+                // No event to show - this shouldn't display if skip logic works
+                VStack(spacing: 30) {
+                    Image(systemName: "calendar.badge.clock")
+                        .font(.system(size: 160))
+                        .foregroundColor(.secondary)
+                    Text("No Upcoming Events")
+                        .font(.system(size: 48))
+                        .foregroundColor(.secondary)
+                }
             }
         }
-        .tag(3)
+        // Timer is driven by currentPage, not onAppear — see pageTimers(for:)
     }
 
+    // MARK: - Countdown Helpers
+    private func formatEventNameForCountdown(_ name: String) -> String {
+        // Clean up event name - remove parts after colon for cleaner display
+        if let colonIndex = name.firstIndex(of: ":") {
+            return String(name[..<colonIndex]).trimmingCharacters(in: .whitespaces)
+        }
+        // Remove parenthetical parts
+        if let parenIndex = name.firstIndex(of: "(") {
+            return String(name[..<parenIndex]).trimmingCharacters(in: .whitespaces)
+        }
+        return name
+    }
+
+    private func formatSmartCountdown(for event: LocariusEvent) -> String {
+        guard let eventDate = event.startDate else { return "--" }
+
+        let timeRemaining = eventDate.timeIntervalSince(countdownCurrentTime)
+        guard timeRemaining > 0 else { return "NOW" }
+
+        let days = Int(timeRemaining) / 86400
+        let hours = Int(timeRemaining) / 3600 % 24
+        let minutes = Int(timeRemaining) / 60 % 60
+        let seconds = Int(timeRemaining) % 60
+
+        // More than 7 days: show "X DAYS"
+        if days > 7 {
+            return "\(days)"
+        }
+
+        // 2-7 days: show "Xd Xh"
+        if days >= 2 {
+            return "\(days)d \(hours)h"
+        }
+
+        // 1 day: show "1d Xh" or just hours if less than 24h
+        if days == 1 {
+            return "1d \(hours)h"
+        }
+
+        // Less than 24 hours: show HH:MM:SS
+        return String(format: "%02d:%02d:%02d", hours, minutes, seconds)
+    }
+
+    private func countdownLabel(for event: LocariusEvent) -> String {
+        guard let eventDate = event.startDate else { return "" }
+
+        let timeRemaining = eventDate.timeIntervalSince(countdownCurrentTime)
+        guard timeRemaining > 0 else { return "" }
+
+        let days = Int(timeRemaining) / 86400
+
+        if days > 7 {
+            return "DAYS"
+        } else if days >= 1 {
+            return "UNTIL EVENT"
+        } else {
+            return "HOURS : MINS : SECS"
+        }
+    }
+
+    private func countdownTextColor(for event: LocariusEvent) -> Color {
+        guard let eventDate = event.startDate else {
+            return colorScheme == .dark ? .white : .black
+        }
+
+        let timeRemaining = eventDate.timeIntervalSince(countdownCurrentTime)
+        let hours = timeRemaining / 3600
+
+        // Within 1 hour - orange/urgent
+        if hours < 1 {
+            return .orange
+        }
+        // Within 24 hours - blue highlight
+        if hours < 24 {
+            return .blue
+        }
+        // Default color
+        return colorScheme == .dark ? .white : .black
+    }
+
+    private func shouldShowCountdownPage() -> Bool {
+        guard let event = countdownEvent else { return false }
+
+        // Don't show if event is a night shift
+        if event.isNightShift { return false }
+
+        // Don't show if event is happening now
+        if isEventCurrentlyHappening(event) { return false }
+
+        return true
+    }
+
+    private func isEventCurrentlyHappening(_ event: LocariusEvent) -> Bool {
+        guard let startDate = event.startDate else { return false }
+        // Assume 4-hour duration for events
+        let endDate = Calendar.current.date(byAdding: .hour, value: 4, to: startDate) ?? startDate
+        let now = countdownCurrentTime
+        return now >= startDate && now < endDate
+    }
+
+    // MARK: - Countdown Timer
+    private func startCountdownTimer() {
+        stopCountdownTimer()
+        countdownTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { _ in
+            countdownCurrentTime = Date()
+        }
+    }
+
+    private func stopCountdownTimer() {
+        countdownTimer?.invalidate()
+        countdownTimer = nil
+    }
+
+    // Update countdown event from fetched events
+    private func updateCountdownEvent() {
+        // Find next non-night-shift event
+        let nonNightShiftEvents = events.filter { !$0.isNightShift }
+        let upcomingEvents = nonNightShiftEvents.filter { event in
+            guard let date = event.startDate else { return false }
+            return date > Date()
+        }.sorted { ($0.startDate ?? .distantFuture) < ($1.startDate ?? .distantFuture) }
+
+        countdownEvent = upcomingEvents.first
+    }
 
     // MARK: - Dashboard View
     private var dashboardView: some View {
@@ -1165,27 +1570,46 @@ struct TVDashboardView: View {
         scheduleNextPageTransition()
     }
 
+    /// The pages the rotation actually visits — whatever is switched on in settings, minus
+    /// Tech Week once the Locarius feed has no sessions left and Co-op Placements while the
+    /// roster is empty, so those pages drop out on their own.
+    private var rotationPages: [DashboardPage] {
+        settings.rotation.filter { page in
+            switch page {
+            case .techWeek: return !techWeek.isEmpty
+            case .coopPlacements: return !coopStudents.isEmpty
+            case .hackathon: return !HackathonRoster.teams.isEmpty
+            default: return true
+            }
+        }
+    }
+
     private func scheduleNextPageTransition() {
         // Cancel any existing timer
         stopSlidingTimer()
 
-        // All pages slide every 1 minute (60 seconds)
-        let duration: TimeInterval = 60.0
+        let pages = rotationPages
+        guard !pages.isEmpty else { return }
 
-        // Create timer for the appropriate duration
+        let current = DashboardPage(rawValue: currentPage)
+        let nextPage: DashboardPage
+
+        if let current, let index = pages.firstIndex(of: current) {
+            nextPage = pages[(index + 1) % pages.count]
+        } else {
+            // Opened from the sidebar onto a page that isn't in the rotation — rejoin at the top
+            nextPage = pages[0]
+        }
+
+        guard nextPage != current else { return } // only one page rotating, nothing to schedule
+
+        // A page holds for its ratio's worth of screen time; a sidebar-only page gets a
+        // default minute before the rotation takes over again.
+        let duration = current.map { settings.isEnabled($0) ? settings.duration($0) : 60.0 } ?? 60.0
+
         slidingTimer = Timer.scheduledTimer(withTimeInterval: duration, repeats: false) { [self] _ in
             withAnimation(.easeInOut(duration: 1.0)) {
-                // Cycle through pages: Dashboard (0) -> Logo (1) -> Calendar (2) -> Photos (3) -> Dashboard (0)
-                // World Map (4) is excluded from auto-rotation (manual navigation only)
-                if currentPage == 0 {
-                    currentPage = 1  // Dashboard -> Logo
-                } else if currentPage == 1 {
-                    currentPage = 2  // Logo -> Calendar
-                } else if currentPage == 2 {
-                    currentPage = 3  // Calendar -> Photos
-                } else {
-                    currentPage = 0  // Photos -> Dashboard (or World Map -> Dashboard if manually navigated)
-                }
+                currentPage = nextPage.rawValue
             }
 
             // Schedule the next transition
@@ -1240,7 +1664,24 @@ struct TVDashboardView: View {
         photoTimer = nil
     }
 
+    // MARK: - Per-Page Timers
+    /// Every page lives in the hierarchy permanently and is just moved off-screen, so a page's
+    /// own .onAppear fires once at launch and its .onDisappear never fires at all. Left that way,
+    /// the countdown's 1-second timer runs forever and mutates state on THIS view, re-evaluating
+    /// all pages once a second. Driving the timers off currentPage keeps them to the visible page.
+    private func pageTimers(for page: Int) {
+        if page == 3 { startPhotoTimer() } else { stopPhotoTimer() }
+        if page == 4 { startCountdownTimer() } else { stopCountdownTimer() }
+    }
+
     // MARK: - Auto-hide Menu Button Timer
+    private func revealMenuButton() {
+        withAnimation(.easeInOut(duration: 0.2)) {
+            showMenuButton = true
+        }
+        startHideButtonTimer()
+    }
+
     private func startHideButtonTimer() {
         // Cancel any existing timer
         stopHideButtonTimer()
@@ -1496,7 +1937,9 @@ struct TVDashboardView: View {
 
                 await MainActor.run {
                     events = fetchedEvents
+                    techWeek = TechWeekSchedule(events: fetchedEvents)
                     isLoadingEvents = false
+                    updateCountdownEvent()
                     print("📅 Fetched \(fetchedEvents.count) events for calendar")
                 }
             } catch {

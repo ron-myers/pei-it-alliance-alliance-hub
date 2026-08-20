@@ -16,6 +16,7 @@ struct AppConfig {
     // MARK: - Configuration Keys
     private enum ConfigKey: String {
         case locariusAPIToken = "LocariusAPIToken"
+        case base44APIToken = "Base44APIToken"
     }
     
     // MARK: - Config Loading
@@ -84,10 +85,27 @@ struct AppConfig {
         return ""
     }
     
+    /// Base44 API token for fetching room status data
+    /// JWT token - check expiry date before updating
+    /// This should be stored in Config.plist (not committed to git)
+    var base44APIToken: String {
+        if let token = configDictionary[ConfigKey.base44APIToken.rawValue] as? String,
+           !token.isEmpty,
+           token != "YOUR_TOKEN_HERE" {
+            return token
+        }
+        return ""
+    }
+
     // MARK: - Validation
-    
+
     /// Check if Locarius API is properly configured
     var isLocariusConfigured: Bool {
         !locariusAPIToken.isEmpty && locariusAPIToken != "YOUR_TOKEN_HERE"
+    }
+
+    /// Check if Base44 API is properly configured
+    var isBase44Configured: Bool {
+        !base44APIToken.isEmpty
     }
 }

@@ -749,19 +749,19 @@ struct RoomStatusWidgetView: View {
     
     private func errorView(error: String) -> some View {
         VStack(spacing: 16) {
-            Image(systemName: "exclamationmark.triangle")
+            Image(systemName: "door.left.hand.open")
                 .font(.system(size: 40))
-                .foregroundColor(.red)
-            
-            Text("Error Loading Data")
+                .foregroundColor(.gray)
+
+            Text("Room Status")
                 .font(.headline)
                 .foregroundColor(.white)
-            
-            Text(error)
+
+            Text("Data temporarily unavailable")
                 .font(.caption)
                 .foregroundColor(.white.opacity(0.7))
                 .multilineTextAlignment(.center)
-                .lineLimit(3)
+                .lineLimit(2)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding(24)
@@ -1188,11 +1188,13 @@ struct UpcomingEventsWidgetView: View {
     
     // MARK: - Helpers
     private func timeAgo(from date: Date) -> String {
+        let halifax = TimeZone(identifier: "America/Halifax") ?? .current
         let formatter = DateFormatter()
         formatter.dateFormat = "h:mm a"
-        formatter.timeZone = TimeZone(identifier: "America/Halifax")
+        formatter.timeZone = halifax
         let timeString = formatter.string(from: date)
-        return "\(timeString) AST"
+        let abbreviation = halifax.abbreviation(for: date) ?? "AST"
+        return "\(timeString) \(abbreviation)"
     }
     
     private func formatEventName(_ name: String) -> String {

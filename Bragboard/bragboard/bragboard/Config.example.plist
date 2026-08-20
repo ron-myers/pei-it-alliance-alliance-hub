@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Copy this file to Config.plist and fill in real values.
+	     Config.plist is gitignored and must never be committed. -->
+
+	<!-- Locarius events API token -->
+	<key>LocariusAPIToken</key>
+	<string>YOUR_TOKEN_HERE</string>
+
+	<!-- Base44 room booking token (JWT, 90-day life).
+	     To refresh: sign in at https://thefoundryroomhub.ca, then read
+	     localStorage["token"] from the browser console. -->
+	<key>Base44APIToken</key>
+	<string>YOUR_TOKEN_HERE</string>
+</dict>
+</plist>
