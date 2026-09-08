@@ -134,20 +134,17 @@ struct TVDashboardView: View {
                             .frame(width: geometry.size.width, height: geometry.size.height)
                             .offset(x: CGFloat(4 - currentPage) * geometry.size.width)
 
-                        // Page 5: Tech Week slideshow
-                        TechWeekSlideshowView(schedule: techWeek, isVisible: currentPage == 5)
+                        // Page 5: Co-op Placements slideshow
+                        CoopPlacementsSlideshowView(students: coopStudents, isVisible: currentPage == 5)
                             .frame(width: geometry.size.width, height: geometry.size.height)
                             .offset(x: CGFloat(5 - currentPage) * geometry.size.width)
 
-                        // Page 6: Co-op Placements slideshow
-                        CoopPlacementsSlideshowView(students: coopStudents, isVisible: currentPage == 6)
+                        // Page 6: Tech Week slideshow — drops out of the rotation on its
+                        // own whenever Locarius has no Tech Week sessions, and comes back
+                        // by itself when next year's are published.
+                        TechWeekSlideshowView(schedule: techWeek, isVisible: currentPage == 6)
                             .frame(width: geometry.size.width, height: geometry.size.height)
                             .offset(x: CGFloat(6 - currentPage) * geometry.size.width)
-
-                        // Page 7: Hackathon team announcements
-                        HackathonTeamsView(teams: HackathonRoster.teams)
-                            .frame(width: geometry.size.width, height: geometry.size.height)
-                            .offset(x: CGFloat(7 - currentPage) * geometry.size.width)
                     }
                     .clipped() // Prevent pages from showing outside the viewport
                 }
@@ -265,7 +262,10 @@ struct TVDashboardView: View {
 
             // Settings — covers everything, and holds the rotation while it's open
             if showSettings {
-                DashboardSettingsView(settings: settings) {
+                DashboardSettingsView(
+                    settings: settings,
+                    onDebug: { showingDebugInfo = true }
+                ) {
                     withAnimation(.easeInOut(duration: 0.3)) {
                         showSettings = false
                     }
@@ -392,27 +392,6 @@ struct TVDashboardView: View {
                 .buttonStyle(.card)
                 .padding(.top, 70)
 
-                // Debug button
-                Button {
-                    withAnimation(.easeInOut(duration: 0.3)) {
-                        showSidebar = false
-                    }
-                    showingDebugInfo.toggle()
-                } label: {
-                    HStack(spacing: 20) {
-                        Image(systemName: "info.circle")
-                            .font(.system(size: 26, weight: .medium))
-                            .frame(width: 30)
-                        Text("Debug")
-                            .font(.system(size: 32, weight: .medium))
-                    }
-                    .foregroundColor(colorScheme == .dark ? .white : .black)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 36)
-                    .padding(.vertical, 16)
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.card)
 
                 // Sync button
                 Button {
@@ -532,35 +511,11 @@ struct TVDashboardView: View {
                 }
                 .buttonStyle(.card)
 
-                // Tech Week button
-                Button {
-                    withAnimation(.easeInOut(duration: 0.3)) {
-                        showSidebar = false
-                        currentPage = 5 // Navigate to Tech Week slideshow
-                        startSlidingTimer()
-                    }
-                } label: {
-                    HStack(spacing: 20) {
-                        Image(systemName: "sparkles.tv")
-                            .font(.system(size: 26, weight: .medium))
-                            .frame(width: 30)
-                        Text("Tech Week")
-                            .font(.system(size: 32, weight: .medium))
-                    }
-                    .foregroundColor(colorScheme == .dark ? .white : .black)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 36)
-                    .padding(.vertical, 16)
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.card)
-                .disabled(techWeek.isEmpty)
-
                 // Co-op Placements button
                 Button {
                     withAnimation(.easeInOut(duration: 0.3)) {
                         showSidebar = false
-                        currentPage = 6 // Navigate to Co-op Placements slideshow
+                        currentPage = 5 // Navigate to Co-op Placements slideshow
                         startSlidingTimer()
                     }
                 } label: {
@@ -580,19 +535,19 @@ struct TVDashboardView: View {
                 .buttonStyle(.card)
                 .disabled(coopStudents.isEmpty)
 
-                // Hackathon Teams button
+                // Tech Week button — greys out by itself when there is no schedule
                 Button {
                     withAnimation(.easeInOut(duration: 0.3)) {
                         showSidebar = false
-                        currentPage = 7 // Navigate to Hackathon team announcements
+                        currentPage = 6 // Navigate to Tech Week slideshow
                         startSlidingTimer()
                     }
                 } label: {
                     HStack(spacing: 20) {
-                        Image(systemName: "person.3.fill")
+                        Image(systemName: "sparkles.tv")
                             .font(.system(size: 26, weight: .medium))
                             .frame(width: 30)
-                        Text("Hackathon Teams")
+                        Text("Tech Week")
                             .font(.system(size: 32, weight: .medium))
                     }
                     .foregroundColor(colorScheme == .dark ? .white : .black)
@@ -602,7 +557,7 @@ struct TVDashboardView: View {
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.card)
-                .disabled(HackathonRoster.teams.isEmpty)
+                .disabled(techWeek.isEmpty)
 
                 // Pitch Timer button - COMMENTED OUT (not needed for now)
 //                Button {
@@ -1576,9 +1531,8 @@ struct TVDashboardView: View {
     private var rotationPages: [DashboardPage] {
         settings.rotation.filter { page in
             switch page {
-            case .techWeek: return !techWeek.isEmpty
             case .coopPlacements: return !coopStudents.isEmpty
-            case .hackathon: return !HackathonRoster.teams.isEmpty
+            case .techWeek: return !techWeek.isEmpty
             default: return true
             }
         }

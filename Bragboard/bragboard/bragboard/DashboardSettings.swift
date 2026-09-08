@@ -17,9 +17,8 @@ enum DashboardPage: Int, CaseIterable, Identifiable {
     case calendar = 2
     case photos = 3
     case countdown = 4
-    case techWeek = 5
-    case coopPlacements = 6
-    case hackathon = 7
+    case coopPlacements = 5
+    case techWeek = 6
 
     var id: Int { rawValue }
 
@@ -30,9 +29,8 @@ enum DashboardPage: Int, CaseIterable, Identifiable {
         case .calendar: return "Calendar"
         case .photos: return "Photos"
         case .countdown: return "Countdown"
-        case .techWeek: return "Tech Week"
         case .coopPlacements: return "Co-op Placements"
-        case .hackathon: return "Hackathon Teams"
+        case .techWeek: return "Tech Week"
         }
     }
 
@@ -43,9 +41,8 @@ enum DashboardPage: Int, CaseIterable, Identifiable {
         case .calendar: return "calendar"
         case .photos: return "photo.on.rectangle.angled"
         case .countdown: return "timer"
-        case .techWeek: return "sparkles.tv"
         case .coopPlacements: return "graduationcap"
-        case .hackathon: return "person.3.fill"
+        case .techWeek: return "sparkles.tv"
         }
     }
 }
@@ -75,10 +72,11 @@ final class DashboardSettings {
         didSet { UserDefaults.standard.set(showPageDots, forKey: Self.pageDotsKey) }
     }
 
-    /// Dashboard 1 : Calendar 2 : Tech Week 3 : Co-op 2 : Hackathon 2, with the other
-    /// three pages available from the sidebar but out of the rotation.
-    private static let defaultRatios = [1, 1, 2, 1, 1, 3, 2, 2]
-    private static let defaultEnabled = [true, false, true, false, false, true, true, true]
+    /// Dashboard 2 : Calendar 3 : Co-op 2 : Tech Week 3, with Logo, Photos and
+    /// Countdown available from the sidebar but out of the rotation. Tech Week
+    /// drops out of the rotation by itself whenever the schedule is empty.
+    private static let defaultRatios = [2, 1, 3, 1, 1, 2, 3]
+    private static let defaultEnabled = [true, false, true, false, false, true, true]
 
     init() {
         let defaults = UserDefaults.standard

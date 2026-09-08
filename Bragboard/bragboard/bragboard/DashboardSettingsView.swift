@@ -13,6 +13,9 @@ struct DashboardSettingsView: View {
     @Environment(\.colorScheme) private var colorScheme
 
     let settings: DashboardSettings
+    /// Opens the diagnostics sheet. Debug lives here rather than in the sidebar
+    /// so the sidebar stays a list of places to go, not a mix of navigation and tools.
+    let onDebug: () -> Void
     let onDone: () -> Void
 
     private var textColor: Color { colorScheme == .dark ? .white : .black }
@@ -42,8 +45,12 @@ struct DashboardSettingsView: View {
 
             Spacer()
 
-            HStack {
+            HStack(spacing: 48) {
                 Button("Done", action: onDone)
+                    .font(.system(size: 30, weight: .semibold))
+                    .buttonStyle(.card)
+
+                Button("Debug", action: onDebug)
                     .font(.system(size: 30, weight: .semibold))
                     .buttonStyle(.card)
 
